@@ -823,17 +823,14 @@ server = function(input, output){
   #########################
   # Function: ANOVA
   #########################
-  ANOVA <- function(data, factors, doInteractions = T, showSD = F){
+  ANOVA <- function(data, factors, doInteractions = T, showSD = F, foldChange = T){
     
     library(readxl); library(rstatix); library(doParallel); library(magrittr); library(tidyverse); library(agricolae); library(ascii)
-    # factors <- colnames(data[,c(1)]) # SELECCIONAR CON LA TABLA
-    # doInteractions <- F # Boton para seleccionar
-    # data <- read_xlsx("./data.xlsx") %>% dplyr::select(., 1:30)  # Poner bien
-    
+
     posResponses <- lapply(data, is.numeric) %>% unlist() %>% which(.)
     responses <- colnames(data)[posResponses]
     responsesRenamed <- paste0("Feat_", 1:length(responses)); colnames(data)[posResponses] = responsesRenamed # Changed to avoid naming problems
-    restFactors <- data %>% dplyr::select(-posResponses) %>% colnames() 
+    restFactors <- data %>% dplyr::select(-all_of(posResponses)) %>% colnames() 
     posFactors <- restFactors %in% factors %>% which(.)
     factors <- restFactors[posFactors] # Fix order of factors 
     ini <- length(restFactors) + 1
@@ -915,8 +912,16 @@ server = function(input, output){
         t() %>% as.data.frame() %>% purrr::set_names(slice(., 1)) %>% slice(-1) %>% drop_na()
     }
     
+    # Foldchanges relative to the maximum mean value of each effect
+    if (foldChange == T) {
+      maxMean <- tableMeans %>% lapply(., function(x) apply(x, 2, as.numeric) %>% apply(., 1, max)) # Extract max means
+      for (i in 1:length(tableSD)) {tableSD[[i]] <- apply(tableSD[[i]], 2, as.numeric) / maxMean[[i]]} # Foldchange of dev
+      tableSD <- lapply(tableSD, function(x) round(x, 2)) # Round to 2 decimals
+      tableMeans <- tableMeans %>% lapply(., function(x) apply(x, 2, as.numeric) %>% apply(., 1, function(x) x/max(x)) %>% t() %>% round(2)) # Foldchange means & round(2)
+    }
+    
     for (i in 1:length(posHoc)) {
-      # Add decimals
+      # Add SD
       if (showSD == T) {tableMaking <- tableMeans[[i]] %>% paste.matrix(., tableSD[[i]], sep = " ± ")}else
       {tableMaking <- tableMeans[[i]]}
       
