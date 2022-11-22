@@ -1,5 +1,5 @@
-library(shiny); library(mixOmics); library(readxl); library(dplyr); library(DT); library(ggrepel); library(shinythemes); library(shinyjs); library(ggforce)
-library(shinycssloaders)
+library(shiny); library(mixOmics); library(readxl); library(DT); library(ggrepel); library(shinythemes); library(shinyjs); library(ggforce)
+library(rstatix); library(magrittr); library(tidyverse); library(agricolae); library(ascii); library(memisc); library(shinycssloaders)
 
 #################################################################################################################################
 #################################################################################################################################
@@ -824,8 +824,6 @@ server = function(input, output){
   # Function: ANOVA
   #########################
   ANOVA <- function(data, factors, doInteractions = T, showSD = F, foldChange = T){
-    
-    library(readxl); library(rstatix); library(doParallel); library(magrittr); library(tidyverse); library(agricolae); library(ascii)
 
     posResponses <- lapply(data, is.numeric) %>% unlist() %>% which(.)
     responses <- colnames(data)[posResponses]
@@ -912,14 +910,48 @@ server = function(input, output){
         t() %>% as.data.frame() %>% purrr::set_names(slice(., 1)) %>% slice(-1) %>% drop_na()
     }
     
+    # Extract min means (for section: decimal fit)
+    minMean <- tableMeans %>% lapply(., function(x) apply(x, 2, as.numeric) %>% apply(., 1, min)) 
+  
     # Foldchanges relative to the maximum mean value of each effect
     if (foldChange == T) {
       maxMean <- tableMeans %>% lapply(., function(x) apply(x, 2, as.numeric) %>% apply(., 1, max)) # Extract max means
       for (i in 1:length(tableSD)) {tableSD[[i]] <- apply(tableSD[[i]], 2, as.numeric) / maxMean[[i]]} # Foldchange of dev
-      tableSD <- lapply(tableSD, function(x) round(x, 2)) # Round to 2 decimals
-      tableMeans <- tableMeans %>% lapply(., function(x) apply(x, 2, as.numeric) %>% apply(., 1, function(x) x/max(x)) %>% t() %>% round(2)) # Foldchange means & round(2)
+      # tableSD <- lapply(tableSD, function(x) round(x, 2)) # Round to 2 decimals
+      tableMeans <- tableMeans %>% lapply(., function(x) apply(x, 2, as.numeric) %>% apply(., 1, function(x) x/max(x)) %>% t())# %>% round(2)) # Foldchange means & round(2)
     }
     
+    # Decimal fit by feature
+    minMean <- do.call(cbind, minMean) %>% apply(., 1, function(x){ # Avoid problems in rows with all the values = 0
+      if (sum(x[x>0]) == 0){0} else{min(x[x>0])}})
+    # Assign minMean to a vector from the min non-zero value across all mean effects
+    decimals <- minMean %>% replace(., .<= 0.0001, 5/100000) %>% replace(., .> 0.0001 & .<= 0.001, 4/100000) %>% replace(., .> 0.001 & .<= 0.08, 3/100000) %>% 
+      replace(., .> 0.08 & .<= 2, 2/100000) %>% replace(., .> 2 & .<= 15, 1/100000) %>% replace(., .> 15, 0)
+    if (foldChange == T) {decimals <- decimals %>% replace(., is.numeric(.), 2)}
+    # Fitting format
+    lapply(tableMeans, function(x){
+      for(i in 1: nrow(x)){
+        x[i,] <- x[i,] %>% as.numeric() %>% formatC(., format = "f", digits = decimals[i])
+      }
+      return(x)
+    })
+    lapply(tableSD, function(x){
+      for(i in 1: nrow(x)){
+        x[i,] <- x[i,] %>% as.numeric() %>% formatC(., format = "f", digits = decimals[i])
+      }
+      return(x)
+    })
+    
+    # for (j in 1:length(tableMeans)) {
+    #   xmeans <- tableMeans[[j]]
+    #   xSD <- tableSD[[j]]
+    #   for (i in 1:nrow(xmeans)) {
+    #     tableMeans[[j]][i,] <- xmeans[i,] %>% as.numeric() %>% formatC(., format = "f", digits = decimals[i])
+    #     tableSD[[j]][i,] <- xSD[i,] %>% as.numeric() %>% formatC(., format = "f", digits = decimals[i])
+    #   }
+    # }
+    
+    # Building the final table
     for (i in 1:length(posHoc)) {
       # Add SD
       if (showSD == T) {tableMaking <- tableMeans[[i]] %>% paste.matrix(., tableSD[[i]], sep = " ± ")}else
