@@ -91,7 +91,7 @@ ui = fluidPage(
                                                  actionButton("resetValuesPCAloadings", "Reset default values"), align = "center"
                                                  
                                     ),
-                                    mainPanel(width = 9, style = "overflow-y:scroll;min-height:700px",
+                                    mainPanel(width = 9, 
                                               plotOutput("scoresPCA", width = 250, height = 250))
                                   )
                          ), 
@@ -164,16 +164,23 @@ ui = fluidPage(
                          #############
                          tabPanel("ANOVA",
                                   sidebarLayout( 
-                                    sidebarPanel(width = 3,
-                                                 column(8, uiOutput("uiFactorsANOVA")),
-                                                 column(4, checkboxInput("doInteractions", "Perform interactions", value = T)),
+                                    sidebarPanel(width = 3, 
+                                                 fluidRow(
+                                                   column(8, uiOutput("uiFactorsANOVA")),
+                                                   column(4, checkboxInput("doInteractions", "Perform interactions", value = T)),
+                                                 ),
                                                  checkboxInput("originalDataANOVA", label = "Use original data", value = T),
                                                  checkboxInput("showSDsANOVA", "Include SD", value = F),
+                                                 checkboxInput("doFoldChange", "Foldchange", value = F),
                                                  actionButton("runANOVA", "Run ANOVA"), align = "center"
                                                  
                                     ),
-                                    mainPanel(width = 9,
-                                              withSpinner(tableOutput('ANOVAautomatic'), type = 4, size = 1)
+                                    mainPanel(width = 9, #style = "overflow-x:scroll;max-width:100%", style = "overflow-y:scroll;max-height:100%",
+                                              fluidRow(
+                                                # column(1, DTOutput("decimalsANOVA")),
+                                                # column(9, withSpinner(tableOutput('ANOVAautomatic'), type = 4, size = 1))
+                                                column(9, withSpinner(DTOutput("decimalsANOVA"), type = 4, size = 1))
+                                              )
                                     )     
                                   )
                          ),
@@ -668,22 +675,75 @@ server = function(input, output){
   ##########################
   # OUTPUT: ANOVA automatic
   ##########################
+  dataANOVA <- reactive({
+    if (input$originalDataANOVA == T) {
+      inputData()
+    }else{
+      inputData()[-levelsRM(),]
+    }
+  })
   
-  output$ANOVAautomatic <- renderTable({
+  # Mean_SD
+  mean_sd_ANOVA <- reactive({
     req(input$runANOVA)
     isolate(
-      if (input$originalDataANOVA == T) {
-        data <- inputData()
-      }else{
-        data <- inputData()[-levelsRM(),]
-      }
+      mean_sdValues <- mean_sd(data = dataANOVA(), factors = input$factorsANOVA, foldChange = input$doFoldChange)
     )
-    isolate(
-      myANOVA <- ANOVA(data = data, factors = input$factorsANOVA, doInteractions = input$doInteractions, showSD = input$showSDsANOVA)
-    )
-    return(myANOVA)
-  }, rownames = TRUE)
+    return(mean_sdValues)
+  })
+  
+  # Decimal to reactiveValues object
+  decimalsANOVA <- reactiveValues(data = NULL)
+  observe({decimalsANOVA$data <- mean_sd_ANOVA()$decimals})
+  # New value to decimalsANOVA if changed in the editable table
+  observeEvent(input$decimalsANOVA_cell_edit, {
+    info <- input$decimalsANOVA_cell_edit
+    row <- info$row %>% as.numeric()
+    value <- info$value %>% as.numeric()
+    value <- ifelse(value < 0, 0, value)
+    if (exists("value")) {
+      decimalsANOVA$data[row,1] <- value
+    }
+  })
 
+  # Fitting decimal format
+  resultsMeanSD <- reactive({
+    req(mean_sd_ANOVA())
+    formatMeanSD(output_mean = mean_sd_ANOVA()$tableMeans, output_SD = mean_sd_ANOVA()$tableSD, decimalsFitted = decimalsANOVA$data)
+  })
+  
+  # ANOVA and poshoc
+  myANOVA <- reactive({
+    req(input$runANOVA)
+    isolate(
+      ANOVA(data = dataANOVA(), factors = input$factorsANOVA, doInteractions = input$doInteractions)
+    )
+  })
+
+  # ANOVA table compilation
+  finalANOVA <- reactive({
+    compileANOVA(tableMeans = resultsMeanSD()$tableMeans, tableSD = resultsMeanSD()$tableSD, posHoc = myANOVA()$posHoc, pvaluesAst = myANOVA()$pvaluesAst,
+                 showSD = input$showSDsANOVA)
+  },)
+  
+  # # ANOVA table compilation
+  # output$ANOVAautomatic <- renderTable({
+  #   compileANOVA(tableMeans = resultsMeanSD()$tableMeans, tableSD = resultsMeanSD()$tableSD, posHoc = myANOVA()$posHoc, pvaluesAst = myANOVA()$pvaluesAst,
+  #                showSD = input$showSDsANOVA)
+  # }, rownames = TRUE, width = "200%")
+
+  ########################################
+  # OUTPUT: Editable table decimals ANOVA
+  ########################################
+  output$decimalsANOVA <- renderDT({
+    req(mean_sd_ANOVA())
+    decimalsTable <- decimalsANOVA$data
+    colnames(decimalsTable) <- "Decimals"
+    finalTable <- cbind(decimalsTable, finalANOVA())
+    datatable(finalTable, editable = TRUE, rownames = F, width = "100%", height = "100%", options = list(
+      searching = F, ordering = F, lengthChange  = F, lengthMenu = FALSE, pageLength = FALSE, paging = F, info = FALSE))
+  })
+  
   ##########################
   # Reset buttons
   ##########################
@@ -695,10 +755,14 @@ server = function(input, output){
     shinyjs::reset("scoressPCAbar")
   })
 
-  output$tableresults <- renderTable({
-    input$summaryData_columns_selected
-  })
+  #########################
+  # TEMPLATE
+  #########################
+   # a <- reactiveValues(a = {data.frame(rep(0, 68))})
   
+  # output$tableresults <- renderTable({
+  #   b$data
+  # })
   
   #########################
   # Function: scatter plot
@@ -823,8 +887,8 @@ server = function(input, output){
   #########################
   # Function: ANOVA
   #########################
-  ANOVA <- function(data, factors, doInteractions = T, showSD = F, foldChange = T){
-
+  ANOVA <- function(data, factors, doInteractions = T){
+    
     posResponses <- lapply(data, is.numeric) %>% unlist() %>% which(.)
     responses <- colnames(data)[posResponses]
     responsesRenamed <- paste0("Feat_", 1:length(responses)); colnames(data)[posResponses] = responsesRenamed # Changed to avoid naming problems
@@ -834,9 +898,6 @@ server = function(input, output){
     ini <- length(restFactors) + 1
     fin <- ncol(data)
     
-    ####################################
-    # ANOVA and pos-hoc
-    ####################################
     anovaResults <- list()
     for(i in ini:fin){
       variable <- responsesRenamed[i - ini + 1]
@@ -893,6 +954,20 @@ server = function(input, output){
     pvaluesAst[pvalues > 0.05] <- "ns"
     if (length(factors) == 1){pvaluesAst <- t(pvaluesAst)}
     
+    rownames(pvaluesAst) <- responses
+    
+    return(list("posHoc" = posHoc, "pvaluesAst" = pvaluesAst))
+  }
+  
+  ####################################
+  # Function: Mean, SD, fit decimals
+  ####################################
+  mean_sd <- function(data, factors, foldChange = F){
+    posResponses <- lapply(data, is.numeric) %>% unlist() %>% which(.)
+    restFactors <- data %>% dplyr::select(-all_of(posResponses)) %>% colnames() 
+    posFactors <- restFactors %in% factors %>% which(.)
+    factors <- restFactors[posFactors] # Fix order of factors 
+    
     # Main effects: means and SD
     tableMeans = tableSD = list()
     for (i in 1:length(posFactors)) {
@@ -910,47 +985,53 @@ server = function(input, output){
         t() %>% as.data.frame() %>% purrr::set_names(slice(., 1)) %>% slice(-1) %>% drop_na()
     }
     
-    # Extract min means (for section: decimal fit)
-    minMean <- tableMeans %>% lapply(., function(x) apply(x, 2, as.numeric) %>% apply(., 1, min)) 
-  
+    # For decimal fit -> extract a vector with the lower mean values of each effect. Extracted here to prevent problems if 
+    # the means are changed (eg. when using foldchange).
+    minMean <- tableMeans %>% lapply(., function(x) apply(x, 2, as.numeric) %>% abs() %>% apply(., 1, min)) # Absolute value for negative variables
+    minMean <- do.call(cbind, minMean) %>% apply(., 1, function(x){ # Avoid problems in rows with all the values = 0
+      if (sum(x[x>0]) == 0){0} else{min(x[x>0])}})
+    maxMean <- tableMeans %>% lapply(., function(x) apply(x, 2, as.numeric) %>% apply(., 1, max)) # Extracts max means (for the nex function)
+    
     # Foldchanges relative to the maximum mean value of each effect
     if (foldChange == T) {
-      maxMean <- tableMeans %>% lapply(., function(x) apply(x, 2, as.numeric) %>% apply(., 1, max)) # Extract max means
       for (i in 1:length(tableSD)) {tableSD[[i]] <- apply(tableSD[[i]], 2, as.numeric) / maxMean[[i]]} # Foldchange of dev
-      # tableSD <- lapply(tableSD, function(x) round(x, 2)) # Round to 2 decimals
       tableMeans <- tableMeans %>% lapply(., function(x) apply(x, 2, as.numeric) %>% apply(., 1, function(x) x/max(x)) %>% t())# %>% round(2)) # Foldchange means & round(2)
     }
     
-    # Decimal fit by feature
-    minMean <- do.call(cbind, minMean) %>% apply(., 1, function(x){ # Avoid problems in rows with all the values = 0
-      if (sum(x[x>0]) == 0){0} else{min(x[x>0])}})
+    # Decimal fit (continue)
     # Assign minMean to a vector from the min non-zero value across all mean effects
     decimals <- minMean %>% replace(., .<= 0.0001, 5/100000) %>% replace(., .> 0.0001 & .<= 0.001, 4/100000) %>% replace(., .> 0.001 & .<= 0.08, 3/100000) %>% 
       replace(., .> 0.08 & .<= 2, 2/100000) %>% replace(., .> 2 & .<= 15, 1/100000) %>% replace(., .> 15, 0)
+    decimals <- decimals * 100000
     if (foldChange == T) {decimals <- decimals %>% replace(., is.numeric(.), 2)}
+    
+    return(list("tableMeans" = tableMeans, "tableSD" = tableSD, "decimals" = as.data.frame(decimals)))
+  }
+  
+  ############################################
+  # Function: ANOVA format (fitting decimals)
+  ############################################
+  formatMeanSD <- function(output_mean, output_SD, decimalsFitted){
+    tableMeans = output_mean
+    tableSD = output_SD
+    
     # Fitting format
-    lapply(tableMeans, function(x){
-      for(i in 1: nrow(x)){
-        x[i,] <- x[i,] %>% as.numeric() %>% formatC(., format = "f", digits = decimals[i])
-      }
+    tableMeans <- lapply(tableMeans, function(x){
+      for(i in 1:nrow(x)){x[i,] <- x[i,] %>% as.numeric() %>% formatC(., format = "f", digits = decimalsFitted[i,])}
       return(x)
     })
-    lapply(tableSD, function(x){
-      for(i in 1: nrow(x)){
-        x[i,] <- x[i,] %>% as.numeric() %>% formatC(., format = "f", digits = decimals[i])
-      }
+    tableSD <- lapply(tableSD, function(x){
+      for(i in 1:nrow(x)){x[i,] <- x[i,] %>% as.numeric() %>% formatC(., format = "f", digits = decimalsFitted[i,])}
       return(x)
     })
     
-    # for (j in 1:length(tableMeans)) {
-    #   xmeans <- tableMeans[[j]]
-    #   xSD <- tableSD[[j]]
-    #   for (i in 1:nrow(xmeans)) {
-    #     tableMeans[[j]][i,] <- xmeans[i,] %>% as.numeric() %>% formatC(., format = "f", digits = decimals[i])
-    #     tableSD[[j]][i,] <- xSD[i,] %>% as.numeric() %>% formatC(., format = "f", digits = decimals[i])
-    #   }
-    # }
-    
+    return(list("tableMeans" = tableMeans, "tableSD" = tableSD))
+  }
+  
+  ####################################
+  # Compile ANOVA table
+  ####################################
+  compileANOVA <- function(tableMeans, tableSD, posHoc, pvaluesAst, showSD = F){
     # Building the final table
     for (i in 1:length(posHoc)) {
       # Add SD
@@ -965,10 +1046,11 @@ server = function(input, output){
       }else{
         tableANOVA <- cbind(tableANOVA, tableMaking)
       }
+      rownames(tableANOVA) <- rownames(pvaluesAst) # Original rownames (since in mean_sd are changed to prevent caption problems)
     }
-    rownames(tableANOVA) <- responses
     return(tableANOVA)
   }
+  
 }
 
 shinyApp(ui, server)
