@@ -165,10 +165,8 @@ ui = fluidPage(
                          tabPanel("ANOVA",
                                   sidebarLayout( 
                                     sidebarPanel(width = 3, 
-                                                 fluidRow(
-                                                   column(8, uiOutput("uiFactorsANOVA")),
-                                                   column(4, checkboxInput("doInteractions", "Perform interactions", value = T)),
-                                                 ),
+                                                 uiOutput("uiFactorsANOVA"),
+                                                 checkboxInput("doInteractions", "Perform interactions", value = T),
                                                  checkboxInput("originalDataANOVA", label = "Use original data", value = T),
                                                  checkboxInput("showSDsANOVA", "Include SD", value = F),
                                                  checkboxInput("doFoldChange", "Foldchange", value = F),
@@ -452,7 +450,7 @@ server = function(input, output){
   my.pca <- reactive({
     Xpca <- X()[-levelsRM(),] %>% dplyr::select(-any_of(constantVars())) 
     ncomp <- ifelse(Xpca %>% dim() %>% min() < 20, Xpca %>% dim() %>% min() %>% as.numeric(), 20)
-    my.pca <- mixOmics::pca(Xpca, ncomp = 5, center = TRUE, scale = TRUE)
+    my.pca <- mixOmics::pca(Xpca, ncomp = ncomp, center = TRUE, scale = TRUE)
     return(my.pca)
   })
   
@@ -677,12 +675,12 @@ server = function(input, output){
   ##########################
   dataANOVA <- reactive({
     if (input$originalDataANOVA == T) {
-      inputData()
+      dataANOVA <- inputData()
     }else{
-      inputData()[-levelsRM(),]
+      dataANOVA <- inputData()[-levelsRM(),]
     }
+    return(dataANOVA)
   })
-  
   # Mean_SD
   mean_sd_ANOVA <- reactive({
     req(input$runANOVA)
@@ -691,7 +689,6 @@ server = function(input, output){
     )
     return(mean_sdValues)
   })
-  
   # Decimal to reactiveValues object
   decimalsANOVA <- reactiveValues(data = NULL)
   observe({decimalsANOVA$data <- mean_sd_ANOVA()$decimals})
@@ -705,13 +702,11 @@ server = function(input, output){
       decimalsANOVA$data[row,1] <- value
     }
   })
-
   # Fitting decimal format
   resultsMeanSD <- reactive({
     req(mean_sd_ANOVA())
     formatMeanSD(output_mean = mean_sd_ANOVA()$tableMeans, output_SD = mean_sd_ANOVA()$tableSD, decimalsFitted = decimalsANOVA$data)
   })
-  
   # ANOVA and poshoc
   myANOVA <- reactive({
     req(input$runANOVA)
@@ -719,29 +714,22 @@ server = function(input, output){
       ANOVA(data = dataANOVA(), factors = input$factorsANOVA, doInteractions = input$doInteractions)
     )
   })
-
   # ANOVA table compilation
   finalANOVA <- reactive({
     compileANOVA(tableMeans = resultsMeanSD()$tableMeans, tableSD = resultsMeanSD()$tableSD, posHoc = myANOVA()$posHoc, pvaluesAst = myANOVA()$pvaluesAst,
                  showSD = input$showSDsANOVA)
   },)
-  
-  # # ANOVA table compilation
-  # output$ANOVAautomatic <- renderTable({
-  #   compileANOVA(tableMeans = resultsMeanSD()$tableMeans, tableSD = resultsMeanSD()$tableSD, posHoc = myANOVA()$posHoc, pvaluesAst = myANOVA()$pvaluesAst,
-  #                showSD = input$showSDsANOVA)
-  # }, rownames = TRUE, width = "200%")
 
   ########################################
-  # OUTPUT: Editable table decimals ANOVA
+  # OUTPUT: TABLE ANOVA
   ########################################
   output$decimalsANOVA <- renderDT({
     req(mean_sd_ANOVA())
     decimalsTable <- decimalsANOVA$data
     colnames(decimalsTable) <- "Decimals"
-    finalTable <- cbind(decimalsTable, finalANOVA())
+    finalTable <- cbind(decimalsTable, finalANOVA() %>% rownames() %>% as.data.frame() %>% setNames("Variables"), finalANOVA())
     datatable(finalTable, editable = TRUE, rownames = F, width = "100%", height = "100%", options = list(
-      searching = F, ordering = F, lengthChange  = F, lengthMenu = FALSE, pageLength = FALSE, paging = F, info = FALSE))
+      searching = F, ordering = T, lengthChange  = F, lengthMenu = FALSE, pageLength = FALSE, paging = F, info = FALSE))
   })
   
   ##########################
@@ -795,7 +783,6 @@ server = function(input, output){
     
     return(scatter)
   }
-  
   
   #########################
   # Function: loadings plot
