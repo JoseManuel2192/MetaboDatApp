@@ -65,6 +65,11 @@ ui = fluidPage(
                                                    column(width = 6, numericInput("Ycomponent", "Y component", min = 1, step = 1, value = 2))
                                                  ),
                                                  
+                                                 fluidRow(
+                                                   column(6, numericInput("heightPCAscores", "Height", value = 700, step = 100)), 
+                                                   column(6, numericInput("widthPCAscores", "Width", value = 900, step = 100))
+                                                 ),
+                                                 
                                                  uiOutput("uiLabelsPCA"), # Select label to display
                                                  
                                                  fluidRow(
@@ -78,13 +83,8 @@ ui = fluidPage(
                                                  ),
                                                  
                                                  fluidRow(
-                                                   column(6, sliderInput("heightPCAscores", "Height plot", min = 400, max = 2000, value = 710)),
-                                                   column(6, sliderInput("widthPCAscores", "Width plot", min = 400, max = 2000, value = 900))
-                                                 ),
-                                                 
-                                                 fluidRow(
-                                                   column(6, numericInput("legendSizePCAscores", "Legend size", min = 1, max = 1000, value = 10, step = 0.1)),
-                                                   column(6, numericInput("pointSizePCAscores", "Shapes size", min = 0.1, max = 10, value = 2, step = 0.1)),
+                                                   column(6, numericInput("legendSizePCAscores", "Legend size", min = 1, max = 1000, value = 10, step = 0.2)),
+                                                   column(6, numericInput("pointSizePCAscores", "Shapes size", min = 0.1, max = 10, value = 2, step = 0.2)),
                                                  ),
                                                  
                                                  br(),
@@ -111,8 +111,8 @@ ui = fluidPage(
                                                  ),
                                                  
                                                  fluidRow(
-                                                   column(6, sliderInput("heightPCAloadings", "Height plot", min = 400, max = 2000, value = 700)),
-                                                   column(6, sliderInput("widthPCAloadings", "Width plot", min = 400, max = 2000, value = 725)),
+                                                   column(6, numericInput("heightPCAloadings", "Height", value = 700, step = 100)), 
+                                                   column(6, numericInput("widthPCAloadings", "Width", value = 725, step = 100))
                                                  ),
                                                  
                                                  fluidRow(
@@ -378,11 +378,19 @@ server = function(input, output){
   # REACTIVE: Input data (before removing samples)
   ################################################
   inputData  <- reactive({
-    # inFile <- req(input$loadData)
-    # if(is.null(inFile)) return(NULL)
-    # data <- read_excel(paste(inFile$datapath, sep=""), 1) %>% as.data.frame()
-    data <- read_excel("./data.xlsx") %>% as.data.frame()
-    return(data)
+    req(input$loadData)
+    
+    # load_file <- function(name, path){
+    #   ext <- tools::file_ext(name)
+    #   switch (ext,
+    #           xls = readxl::read_xls(paste(path, sep = ""), 1),
+    #           xlsx = readxl::read_xlsx(paste(path, sep = ""), 1),
+    #           validate("Invalid file; Please upload a .xls or .xlsx file")
+    #   )
+    # }
+    load_file(input$loadData$name, input$loadData$datapath)
+    
+    # read_excel("./data.xlsx") %>% as.data.frame()
   })
   
   ##############################################
@@ -752,6 +760,24 @@ server = function(input, output){
   #   b$data
   # })
   
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   #########################
   # Function: scatter plot
   #########################
@@ -824,21 +850,17 @@ server = function(input, output){
   
   boxplotFunction = function(dataBoxplot, setcolors, rotate = F, size_axis, size_label_axis, height, width, x_label_angle, order, hline, yname = "Variable", violinPlot = F,
                              dotPlot = "None"){
-    
-    
     if (order == "increasing") {
       boxplot <- ggplot(dataBoxplot, aes(x=reorder(x,y), y=y, fill = x))
       }else{
       boxplot <- ggplot(dataBoxplot, aes(x=x, y=y, fill = x)) 
       }
-    
     # Violin  or box plot
     if (violinPlot == T) {
       boxplot <- boxplot + geom_violin() 
     }else{
       boxplot <- boxplot + geom_boxplot()
     }
-    
     # Include dots
     if (dotPlot == "Dot") {
       boxplot <- boxplot + geom_dotplot(binaxis='y', stackdir='center', position=position_dodge(1))
@@ -846,7 +868,6 @@ server = function(input, output){
     if (dotPlot == "Jitter") {
       boxplot <- boxplot + geom_jitter(shape=16, position=position_jitter(0.2))
     }
-    
     boxplot <- boxplot + theme(plot.title = element_text(hjust = 0.35, face = "bold"))  
     # scale_y_continuous(limits=c(-2,12.5))
     # 
@@ -858,7 +879,6 @@ server = function(input, output){
       theme(axis.text=element_text(size=size_axis, face="bold", colour = "black"),
             axis.title=element_text(size=size_label_axis,face="bold"))
     boxplot <- boxplot  + theme(legend.position="none")  #+ scale_fill_manual(values = setcolors)
-  
 
     if (rotate == T) {
       boxplot <- boxplot + coord_flip() + theme(axis.text.y = element_text(angle = x_label_angle, hjust = 1),
