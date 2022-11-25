@@ -4,10 +4,10 @@ server = function(input, output){
   # REACTIVE: Input data (before removing samples)
   ################################################
   inputData  <- reactive({
-    req(input$loadData)
-    load_file(name = input$loadData$name, path = input$loadData$datapath)
+    # req(input$loadData)
+    # load_file(name = input$loadData$name, path = input$loadData$datapath)
     
-    # read_excel("./data.xlsx") %>% as.data.frame()
+    read_excel("./data.xlsx") %>% as.data.frame()
   })
   
   ##############################################
@@ -310,7 +310,7 @@ server = function(input, output){
   mean_sd_ANOVA <- reactive({
     req(input$runANOVA)
     isolate(
-      mean_sdValues <- mean_sd(data = dataANOVA(), factors = input$factorsANOVA, foldChange = input$doFoldChange)
+      mean_sdValues <- doMeanSD(data = dataANOVA(), factors = input$factorsANOVA, foldChange = input$doFoldChange)
     )
     return(mean_sdValues)
   })
