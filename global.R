@@ -10,8 +10,18 @@ load_file <- function(name, path){
   )
 }
 
+############################
+# Grouping by level factors
+############################
+groupSummary <- function(data, summaryFunction, factors){
+  summaryFunction <- enquo(summaryFunction)
+  data %>% 
+    group_by(., .[,factors]) %>% 
+    summarise_each(funs(!!summaryFunction))
+}
+
 #########################
-# Function: scatter plot
+# Scatter plot
 #########################
 scatterPlot <- function(scatterData, labelSize = 3, pointSize = 3, legendSize = 14, pch, col, titleScatter = "",
                         Xcomp = 1, Ycomp = 2, Y, labels = "None", segment.size = 0.1, declutterLabels = 10){
@@ -43,7 +53,7 @@ scatterPlot <- function(scatterData, labelSize = 3, pointSize = 3, legendSize = 
 }
 
 #########################
-# Function: loadings plot
+# Loadings plot
 #########################
 loadingsPlot <- function(loadingsData, labelSize = 3, pointSize = 3, legendSize = 14, title = "", segment.size = 0.02,
                          Xcomp = 1, Ycomp = 2, Y, labels = F, fixAxis = T, radInn = 0.5, declutterLabels = 10, filterVar = F){
@@ -77,7 +87,7 @@ loadingsPlot <- function(loadingsData, labelSize = 3, pointSize = 3, legendSize 
 }
 
 #########################
-# Function: Box plot
+# Box plot
 #########################
 
 boxplotFunction = function(dataBoxplot, setcolors, rotate = F, size_axis, size_label_axis, height, width, x_label_angle, order, hline, yname = "Variable", violinPlot = F,
@@ -124,7 +134,7 @@ boxplotFunction = function(dataBoxplot, setcolors, rotate = F, size_axis, size_l
 
 
 #########################
-# Function: ANOVA
+# ANOVA
 #########################
 ANOVA <- function(data, factors, doInteractions = T){
   
@@ -199,7 +209,7 @@ ANOVA <- function(data, factors, doInteractions = T){
 }
 
 ####################################
-# Function: Mean, SD, fit decimals
+# Mean, SD, fit decimals
 ####################################
 mean_sd <- function(data, factors, foldChange = F){
   posResponses <- lapply(data, is.numeric) %>% unlist() %>% which(.)
@@ -248,7 +258,7 @@ mean_sd <- function(data, factors, foldChange = F){
 }
 
 ############################################
-# Function: ANOVA format (fitting decimals)
+# ANOVA format (fitting decimals)
 ############################################
 formatMeanSD <- function(output_mean, output_SD, decimalsFitted){
   tableMeans = output_mean
@@ -288,4 +298,42 @@ compileANOVA <- function(tableMeans, tableSD, posHoc, pvaluesAst, showSD = F){
     rownames(tableANOVA) <- rownames(pvaluesAst) # Original rownames (since in mean_sd are changed to prevent caption problems)
   }
   return(tableANOVA)
+}
+
+####################################
+# BarPlot
+####################################
+barPlot <- function(data, xcomp, ycomp, fill, position, stat, alpha, legendSize = 15, jitter = F, size_Y_title, size_label_axis, x_label_angle,
+                    showSD = F){
+  
+  factors <- colnames(data)[c(xcomp,fill)]
+  mean <- groupSummary(data = data, summaryFunction = mean, factors = factors) %>% data.frame()
+  sd <- groupSummary(data = data, summaryFunction = sd, factors = factors) %>% data.frame()
+  
+  if (length(factors) > 2) {}
+  if (length(factors) == 1) {
+    barPlot <- ggplot(data = mean, aes(x = mean[,1], y =  mean[,ycomp], fill = mean[, 1]))
+  }else{
+    barPlot <- ggplot(data = mean, aes(x = mean[,1], y =  mean[,ycomp], fill = mean[, 2]))
+  }
+  
+  barPlot <- barPlot +
+    geom_bar(stat = stat, position = position_dodge(), alpha = alpha) +
+    theme_bw() +
+    xlab("") + ylab(colnames(mean)[ycomp]) + 
+    ggtitle(title) + 
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme(legend.title = element_text(size = legendSize), legend.text = element_text(size = legendSize / 1.3)) + 
+    labs(color = "Legend", shape = "Legend") + labs(fill = "Legend") +
+    theme(axis.text=element_text(size=size_Y_title, face="bold", colour = "black"), axis.title=element_text(size=size_label_axis,face="bold")) +
+    theme(axis.text.x = element_text(angle = x_label_angle, hjust = 1), axis.text.y = element_text(angle = 90, hjust = 0.3, size = size_label_axis/1.2))
+  if (jitter == T) {
+    barPlot <- barPlot + geom_jitter(shape=16, position=position_jitter(0.2))
+  }
+  if (showSD == T) {
+    lower <- mean %>% pull(ycomp) - sd %>% pull(ycomp)
+    upper <- mean %>% pull(ycomp) + sd %>% pull(ycomp)
+    barPlot <- barPlot + geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2, position=position_dodge(.9))
+  }
+  barPlot 
 }
