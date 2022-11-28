@@ -343,7 +343,7 @@ server = function(input, output){
   finalANOVA <- reactive({
     compileANOVA(tableMeans = resultsMeanSD()$tableMeans, tableSD = resultsMeanSD()$tableSD, posHoc = myANOVA()$posHoc, pvaluesAst = myANOVA()$pvaluesAst,
                  showSD = input$showSDsANOVA)
-  },)
+  })
   
   ########################################
   # OUTPUT: TABLE ANOVA
@@ -360,7 +360,7 @@ server = function(input, output){
   ########################################
   # OUTPUT: BARPLOT
   ########################################
-  barPlotServer("barPlot", choicesX = factors() %>% colnames(), choicesY = X() %>% colnames(), data = inputData())
+  # barPlotServer("barPlot", choicesX = factors() %>% colnames(), choicesY = X() %>% colnames(), data = inputData())
   
   
   ##########################

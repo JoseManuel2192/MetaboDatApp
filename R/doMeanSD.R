@@ -8,17 +8,17 @@ doMeanSD <- function(data, factors, foldChange = F){
   # Main effects: means and SD
   tableMeans = tableSD = list()
   for (i in 1:length(posFactors)) {
-    tableMeans[[i]] <- data %>% group_by(data %>% dplyr::select(posFactors[i])) %>% summarise_all(mean) %>% t() %>% as.data.frame() %>% 
+    tableMeans[[i]] <- data %>% group_by(data %>% dplyr::select(posFactors[i])) %>% summarise_all(funs(mean)) %>% t() %>% as.data.frame() %>% 
       purrr::set_names(slice(., 1)) %>% slice(-1) %>% drop_na()
-    tableSD[[i]] <- data %>% group_by(data %>% dplyr::select(posFactors[i])) %>% summarise_all(sd) %>% t() %>% as.data.frame() %>% 
+    tableSD[[i]] <- data %>% group_by(data %>% dplyr::select(posFactors[i])) %>% summarise_all(funs(sd)) %>% t() %>% as.data.frame() %>% 
       purrr::set_names(slice(., 1)) %>% slice(-1) %>% drop_na()
   }
   
   # Interaction effect (number of factors is > 1): means and SD
   if (length(posFactors) > 1) {
-    tableMeans[[i+1]] <- data %>% group_by(data %>% dplyr::select(all_of(posFactors))) %>% summarise_all(mean) %>% unite("Interactions", 1:2, remove = T, sep = " x ") %>% 
+    tableMeans[[i+1]] <- data %>% group_by(data %>% dplyr::select(all_of(posFactors))) %>% summarise_all(funs(mean)) %>% unite("Interactions", 1:2, remove = T, sep = " x ") %>% 
       t() %>% as.data.frame() %>% purrr::set_names(slice(., 1)) %>% slice(-1) %>% drop_na()
-    tableSD[[i+1]] <- data %>% group_by(data %>% dplyr::select(all_of(posFactors))) %>% summarise_all(sd) %>% unite("Interactions", 1:2, remove = T, sep = " x ") %>%
+    tableSD[[i+1]] <- data %>% group_by(data %>% dplyr::select(all_of(posFactors))) %>% summarise_all(funs(sd)) %>% unite("Interactions", 1:2, remove = T, sep = " x ") %>%
       t() %>% as.data.frame() %>% purrr::set_names(slice(., 1)) %>% slice(-1) %>% drop_na()
   }
   

@@ -33,7 +33,7 @@ ANOVA <- function(data, factors, doInteractions = T){
     posHocFeat <- list()
     for (j in 1:length(factors)) {
       posHocFeat[[j]] <- HSD.test(modelAOV, factors[j], group = T, console = F)$groups %>% mutate(rownames(.)) %>%
-        setNames(., c("Feat", "groups", "names")) %>% arrange(., names) %>% t() %>% as.tibble() %>% slice(2)
+        setNames(., c("Feat", "groups", "names")) %>% arrange(., names) %>% t() %>% as_tibble() %>% slice(2)
       if (j %in% rmPosHoc) { # Remove letters from pos-hoc when p-value > 0.05
         posHocFeat[[j]] <- posHocFeat[[j]] %>% mutate_all(funs(str_replace(., ., " ")))
       }
@@ -42,7 +42,7 @@ ANOVA <- function(data, factors, doInteractions = T){
     # Interactions
     if (doInteractions == T & length(factors) > 1) {
       posHocFeat[[j+1]] <- HSD.test(modelAOV, factors, group = T, console = F)$groups %>% mutate(rownames(.)) %>%
-        setNames(., c("Feat", "groups", "names")) %>% arrange(., names) %>% t() %>% as.tibble() %>% slice(2)
+        setNames(., c("Feat", "groups", "names")) %>% arrange(., names) %>% t() %>% as_tibble() %>% slice(2)
       if (c(j+1) %in% rmPosHoc) { # Remove letters from pos-hoc when p-value > 0.05
         posHocFeat[[j+1]] <- posHocFeat[[j+1]] %>% mutate_all(funs(str_replace(., ., " ")))
       }
