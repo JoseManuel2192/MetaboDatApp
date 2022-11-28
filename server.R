@@ -357,6 +357,12 @@ server = function(input, output){
       searching = F, ordering = T, lengthChange  = F, lengthMenu = FALSE, pageLength = FALSE, paging = F, info = FALSE))
   })
   
+  ########################################
+  # OUTPUT: BARPLOT
+  ########################################
+  barPlotServer("barPlot", choicesX = factors() %>% colnames(), choicesY = X() %>% colnames(), data = inputData())
+  
+  
   ##########################
   # Reset buttons
   ##########################

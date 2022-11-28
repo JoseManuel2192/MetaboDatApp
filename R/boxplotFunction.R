@@ -26,16 +26,16 @@ boxplotFunction = function(dataBoxplot, setcolors, rotate = F, size_axis, size_l
   # }
   # 
   boxplot <- boxplot + labs(x="", y = yname) +
-    theme(axis.text=element_text(size=size_axis, face="bold", colour = "black"),
+    theme(axis.text=element_text(face="bold", colour = "black"),
           axis.title=element_text(size=size_label_axis,face="bold"))
   boxplot <- boxplot  + theme(legend.position="none")  #+ scale_fill_manual(values = setcolors)
   
   if (rotate == T) {
-    boxplot <- boxplot + coord_flip() + theme(axis.text.y = element_text(angle = x_label_angle, hjust = 1),
-                                              axis.text.x = element_text(angle = 0))
+    boxplot <- boxplot + coord_flip() + theme(axis.text.y = element_text(angle = x_label_angle, hjust = 1, size = size_axis),
+                                              axis.text.x = element_text(angle = 0, size = size_axis/1.2))
   } else{
-    boxplot <- boxplot + theme(axis.text.x = element_text(angle = x_label_angle, hjust = 1),
-                               axis.text.y = element_text(angle = 90, hjust = 0.3))
+    boxplot <- boxplot + theme(axis.text.x = element_text(angle = x_label_angle, hjust = 1, size = size_axis),
+                               axis.text.y = element_text(angle = 90, hjust = 0.3, size = size_axis/1.2))
   }
   return(boxplot)
 }
