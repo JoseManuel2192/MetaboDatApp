@@ -13,7 +13,7 @@ load_file <- function(name, path){
 ############################
 # Grouping by level factors
 ############################
-groupSummary <- function(data, summaryFunction, factors){
+groupSummary <- function(data, factors, summaryFunction){
   summaryFunction <- enquo(summaryFunction)
   data %>% 
     group_by(., .[,factors]) %>% 

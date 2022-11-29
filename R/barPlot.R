@@ -6,15 +6,23 @@ barPlot <- function(data, xcomp, ycomp, fill, stat = "identity", alpha = 1, size
   sd <- groupSummary(data = data, summaryFunction = sd, factors = factors) %>% data.frame()
 
   barPlot <- ggplot(data = mean, aes(x = pull(mean, xcomp), y =  pull(mean, ycomp), fill = pull(mean, fill))) +
-    geom_bar(stat = stat, position = position_dodge(), alpha = alpha) +
+    geom_bar(stat = stat, position = position_dodge(), alpha = alpha, color = "black") +
     theme_bw() +
     xlab("") + ylab(ycomp) + 
-    ggtitle(title) + theme(title = element_text(size = sizeTitle)) +
-    theme(plot.title = element_text(hjust = 0.5)) +
-    theme(legend.title = element_text(size = sizeLegendTitle), legend.text = element_text(size = sizeLegendLevels)) + 
     labs(color = "Legend", shape = "Legend") + labs(fill = "Legend") +
-    theme(axis.text=element_text(size=sizeXYaxis, face="bold", colour = "black"), axis.title=element_text(size = sizeYlabel, face="bold")) +
-    theme(axis.text.x = element_text(angle = rotateXlabel, hjust = 1, size = sizeXYaxis), axis.text.y = element_text(angle = 90, hjust = 0.3, size = sizeXYaxis/1.2))
+    
+    ggtitle(title) + 
+    theme(title = element_text(size = sizeTitle)) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    
+    theme(axis.text = element_text(size = sizeXYaxis, face="bold", colour = "black")) +
+    theme(axis.title = element_text(size = sizeYlabel, face="bold")) +
+    theme(axis.text.x = element_text(angle = rotateXlabel, hjust = 1, size = sizeXYaxis)) +
+    theme(axis.text.y = element_text(angle = 90, hjust = 0.3, size = sizeXYaxis/1.2)) +
+    
+    theme(legend.title = element_text(size = sizeLegendTitle)) + 
+    theme(legend.text = element_text(size = sizeLegendLevels))
+      
   if (jitter == T) {
     barPlot <- barPlot + geom_jitter(shape=16, position=position_jitter(0.2))
   }
@@ -30,7 +38,7 @@ barPlot <- function(data, xcomp, ycomp, fill, stat = "identity", alpha = 1, size
 barPlotUI <- function(id) {
   ns <- NS(id)
   tagList(
-    sidebarLayout( 
+    sidebarLayout(
       sidebarPanel(width = 3, align = "center",
                    h4("Figure settings", align = "center"), br(),
                    uiOutput(ns("uixcomp")),
@@ -39,12 +47,12 @@ barPlotUI <- function(id) {
                    checkboxInput(ns("showSD"), "Show standard deviation", value = F),
                    settingPlot(title = ns("title"), sizeTitle = ns("sizeTitle"), height = ns("height"),
                                width = ns("width"), sizeXYaxis = ns("sizeXYaxis"), sizeYlabel = ns("sizeYlabel"),
-                               rotateXlabel = ns("rotateXlabel"), sizeLegendTitle = ns("sizeLegendTitle"), 
+                               rotateXlabel = ns("rotateXlabel"), sizeLegendTitle = ns("sizeLegendTitle"),
                                sizeLegendLevels = ns("sizeLegendLevels"))
       ),
       mainPanel(width = 9,
                 plotOutput(ns("plottingBar"))
-      )     
+      )
     )
   )
 }

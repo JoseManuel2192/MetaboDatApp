@@ -25,7 +25,8 @@ plsdaUI <- function(id) {
       ),
       mainPanel(width = 9,
                 plotOutput(ns("errorRate")),
-                plotOutput(ns("scatterPlot"))
+                plotOutput(ns("scatterPlot")),
+                # tableOutput(ns("prueba"))
       )
     )
   )
@@ -49,25 +50,38 @@ plsdaServer <- function(id, X, Y, col.pch) {
         plot(perf_plsda$perf)
       }, width = 800, height = 500, res = 120)
       
-      # Select optimum number of components (automatic suggestion)
-      output$uincompOpt <- renderUI({
-        req(perf_plsda$perf)
-        error <- perf_plsda$perf$error.rate$BER %>% as.data.frame()
-        optimalN <- findOptimalN(error)
-        numericInput("ncompOpt", "Optimum N comp (suggested)", value = optimalN, min = 1, step = 1)
-      })
       
+      
+      # UI: run optimization plsda bottom
       output$uirunPLSDA <- renderUI({
         req(perf_plsda$perf)
         actionButton("runPLSDAopt", "Run PLS-DA optimized")
       })
+      
+      # Optimal number of component
+      optimalN <- reactive({
+        req(perf_plsda$perf)
+        error <- perf_plsda$perf$error.rate$BER %>% as.data.frame()
+        findOptimalN(error) %>% as.numeric()
+      })
+      
+      # Select optimum number of components (automatic suggestion)
+      output$uincompOpt <- renderUI({
+        # paste0(1:input$maxNcomp, "components")
+        # selectInput()
+        numericInput(session$ns("ncompOpt"), "Optimum N comp (suggested)", value = optimalN(), min = 1, step = 1)
+      })
+      
+      # output$prueba <- renderTable({input$ncompOpt})
+      
+      
       
       output$scatterPlot <- renderPlot({
         # observeEvent(input$runPLSDAopt, {
         # my_plsda <- mixOmics::plsda(X,Y, ncomp = input$ncompOpt)
         
         req(perf_plsda$perf)
-        my_plsda <- mixOmics::plsda(X,Y, ncomp = 2)
+        my_plsda <- mixOmics::plsda(X,Y, ncomp = input$ncompOpt)
         scatterData <- my_plsda$variates$X
         
         plotScores <- scatterPlot(scatterData = scatterData, Xcomp = input$comp1, Ycomp = input$comp2, title = input$title, sizeTitle = input$sizeTitle,

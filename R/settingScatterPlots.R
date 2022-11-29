@@ -15,12 +15,12 @@ settingScatterPlots <- function(comp1, comp2, title, sizeTitle, height, width, s
     
     fluidRow(
       column(6, numericInput(height, "Height Plot", value = 600, step = 100, min = 0)), 
-      column(6, numericInput(width, "Width Plot", value = 600, step = 100, min = 0)) 
+      column(6, numericInput(width, "Width Plot", value = 700, step = 100, min = 0)) 
     ),
     
     fluidRow(
-      column(6, numericInput(sizeLabels, "Size labels", value = 600, step = 100, min = 0)), 
-      column(6, numericInput(sizePoints, "Size points", value = 600, step = 100, min = 0)) 
+      column(6, numericInput(sizeLabels, "Size labels", value = 3, step = 1, min = 0)), 
+      column(6, numericInput(sizePoints, "Size points", value = 5, step = 1, min = 0)) 
     ),
     
     fluidRow(
@@ -29,8 +29,8 @@ settingScatterPlots <- function(comp1, comp2, title, sizeTitle, height, width, s
     ),
     
     fluidRow(
-      column(6, numericInput(sizeLegendTitle, "Size legend title", value = 20, step = 1, min = 0)), 
-      column(6, numericInput(sizeLegendLevels, "Size legend levels", value = 16, step = 1, min = 0))
+      column(6, numericInput(sizeLegendTitle, "Size legend title", value = 15, step = 1, min = 0)), 
+      column(6, numericInput(sizeLegendLevels, "Size legend levels", value = 13, step = 1, min = 0))
     ),
     
     fluidRow(
