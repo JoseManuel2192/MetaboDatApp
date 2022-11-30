@@ -6,7 +6,6 @@ server = function(input, output){
   inputData  <- reactive({
     # req(input$loadData)
     # load_file(name = input$loadData$name, path = input$loadData$datapath) %>% as.data.frame()
-    
     read_excel("./data.xlsx") %>% as.data.frame()
   })
   
@@ -362,6 +361,10 @@ server = function(input, output){
   ########################################
   barPlotServer("barPlot", choicesX = factors() %>% colnames(), choicesY = X() %>% colnames(), data = inputData())
   
+  ########################################
+  # OUTPUT: BARPLOT
+  ########################################
+  plsdaServer("plsdaScores", X = X(), Y = Y(), col.pch = col.pch())
   
   ##########################
   # Reset buttons

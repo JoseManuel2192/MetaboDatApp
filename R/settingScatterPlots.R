@@ -1,5 +1,5 @@
 settingScatterPlots <- function(comp1, comp2, title, sizeTitle, height, width, sizeLabels, sizePoints, 
-                                sizeXYaxis, sizeYlabel, sizeLegendTitle, sizeLegendLevels, declutterLabels,
+                                sizeXYaxis, sizeXYlabel, sizeLegendTitle, sizeLegendLevels, declutterLabels,
                                 sizeSegment, showCentroid, showEllipses) {
   tagList(
     
@@ -10,27 +10,27 @@ settingScatterPlots <- function(comp1, comp2, title, sizeTitle, height, width, s
     
     fluidRow(
       column(8, textInput(title, "Title", value = "")),
-      column(4, numericInput(sizeTitle, "Size title", value = 12))
+      column(4, numericInput(sizeTitle, "Size title", value = 9))
     ), 
     
     fluidRow(
-      column(6, numericInput(height, "Height Plot", value = 600, step = 100, min = 0)), 
-      column(6, numericInput(width, "Width Plot", value = 700, step = 100, min = 0)) 
+      column(6, numericInput(height, "Height Plot", value = 700, step = 100, min = 0)), 
+      column(6, numericInput(width, "Width Plot", value = 900, step = 100, min = 0)) 
     ),
     
     fluidRow(
-      column(6, numericInput(sizeLabels, "Size labels", value = 3, step = 1, min = 0)), 
-      column(6, numericInput(sizePoints, "Size points", value = 5, step = 1, min = 0)) 
+      column(6, numericInput(sizeLabels, "Size labels", value = 2, step = 0.5, min = 0)), 
+      column(6, numericInput(sizePoints, "Size points", value = 3, step = 0.5, min = 0)) 
     ),
     
     fluidRow(
-      column(6, numericInput(sizeXYaxis, "Size XY axis", value = 16, step = 1, min = 0)), 
-      column(6, numericInput(sizeYlabel, "Size XY names", value = 16, step = 1, min = 0)) 
+      column(6, numericInput(sizeXYaxis, "Size XY axis", value = 6, step = 1, min = 0)), 
+      column(6, numericInput(sizeXYlabel, "Size XY names", value = 10, step = 1, min = 0)) 
     ),
     
     fluidRow(
-      column(6, numericInput(sizeLegendTitle, "Size legend title", value = 15, step = 1, min = 0)), 
-      column(6, numericInput(sizeLegendLevels, "Size legend levels", value = 13, step = 1, min = 0))
+      column(6, numericInput(sizeLegendTitle, "Size legend title", value = 11, step = 1, min = 0)), 
+      column(6, numericInput(sizeLegendLevels, "Size legend levels", value = 9, step = 1, min = 0))
     ),
     
     fluidRow(

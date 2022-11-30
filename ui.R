@@ -276,25 +276,20 @@ ui = fluidPage(
                          ##################
                          # LDA
                          ##################
-                         tabPanel("LDA",
-                                  sidebarLayout( 
-                                    sidebarPanel(width = 3
-                                    ),
-                                    mainPanel(width = 9        
-                                    )     
-                                  )
-                         ),
+                         # tabPanel("LDA",
+                         #          sidebarLayout( 
+                         #            sidebarPanel(width = 3
+                         #            ),
+                         #            mainPanel(width = 9        
+                         #            )     
+                         #          )
+                         # ),
                          
                          ##################
                          # PLS-DA
                          ##################
                          tabPanel("PLS-DA",
-                                  sidebarLayout( 
-                                    sidebarPanel(width = 3
-                                    ),
-                                    mainPanel(width = 9        
-                                    )     
-                                  )
+                                  plsdaUI("plsdaScores")
                          ),
                          
                          ##################

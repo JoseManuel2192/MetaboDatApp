@@ -15,8 +15,8 @@ barPlot <- function(data, xcomp, ycomp, fill, stat = "identity", alpha = 1, size
     theme(title = element_text(size = sizeTitle)) +
     theme(plot.title = element_text(hjust = 0.5)) +
     
-    theme(axis.text = element_text(size = sizeXYaxis, face="bold", colour = "black")) +
-    theme(axis.title = element_text(size = sizeYlabel, face="bold")) +
+    theme(axis.text = element_text(size = sizeXYaxis, face = "bold", colour = "black")) +
+    theme(axis.title = element_text(size = sizeYlabel, face ="bold")) +
     theme(axis.text.x = element_text(angle = rotateXlabel, hjust = 1, size = sizeXYaxis)) +
     theme(axis.text.y = element_text(angle = 90, hjust = 0.3, size = sizeXYaxis/1.2)) +
     
