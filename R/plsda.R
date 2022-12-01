@@ -283,32 +283,52 @@ if (crossVal == "Mfold") {perf_plsda <- perf(my_plsda, validation = "Mfold", pro
 #############################################################################################################
 
 # Load inputs
-library(caret); library(tidyverse); library(plyr); library(splitTools); library(foreach)
+library(caret); library(tidyverse); library(plyr); library(splitTools); library(foreach); library(magrittr)
 Y <- data$Style %>% as.factor()
 X <- data[,-1] %>% scale()
 ncompMax <- 6 # Max number of components to optimize
 typePartition <- "stratified" # stratified, basic, grouped, blocked
-type <- "loo" # Mfold / loo
-k = 6
-rep = 10
+type <- "Mfold" # Mfold / loo
+folds = 6
+rep = 30
 
 # Partitions
 if (type == "loo") {
-  my.partition <- create_folds(y = Y, k = length(Y), m_rep = 1, type = typePartition)
+  folds <- length(Y)
+  rep <- 1
+  my.partition <- create_folds(y = Y, k = folds, m_rep = rep, type = typePartition)
 } else{
   if (type == "Mfold") {
     my.partition <- create_folds(y = Y, k = k, m_rep = rep, type = typePartition)
   }
 }
 
+# plsAsses <- lapply(my.partition, function(partition){
+#   plsAssignations(X, Y, partition = partition, ncompMax = 6)
+# })
 
-plsPerf <- lapply(my.partition, function(partition){
-  plsdaMD(X, Y, partition = partition, ncompMax = 6)
-})
-plsPerf$Fold1.Rep01
-plsPerf$Fold1.Rep02
+# Arrange lists with matrixes cointaining all the predicted labels
+plsdaPerf <- plsdaCV(X, Y, my.partition = my.partition)
 
-my.pls <- plsdaMD(X, Y, partition = partition, ncompMax = 6)
+plsdaPerf$centroids$rep1
+
+
+
+
+
+
+
+
+
+
+
+getErrors(assignations = purrr:::map(all.dist.Assign, 1), Y = Y)
+
+library(mixOmics)
+my.plsda <- plsda(X, Y, ncomp = ncompMax)
+perfPLSDA <- perf(my.plsda, validation = "loo", progressBar = T)
+perfPLSDA$error.rate
+
 
 # Plot each diagnostic.
 diagnostic <- my.pls$BER
@@ -320,10 +340,13 @@ gg
 
 
 partition <- my.partition$Fold001
+partition <- my.partition$Fold001[-c(1:6)]
+my.pls <- plsAssignations(X, Y, partition = partition, ncompMax = 6)
+my.pls
 #############################################################################################################
 # PLSDA
 #############################################################################################################
-plsdaMD <- function(X, Y, partition, ncompMax){
+plsAssignations <- function(X, Y, partition, ncompMax){
   
   # Partitions
   Xtrain <- X %>% as_tibble() %>% slice(partition)
@@ -336,18 +359,35 @@ plsdaMD <- function(X, Y, partition, ncompMax){
   predictions <- predict(my.plsda, Xtest)
   
   # Obtain predictions from different distances
-  max.dist <- predictions$MajorityVote$max.dist
-  centroids.dist <- predictions$MajorityVote$centroids.dist
-  mahalanobis.dist <- predictions$MajorityVote$mahalanobis.dist
+  max.dist <- predictions$MajorityVote$max.dist %>% as_tibble() %>% dplyr::mutate("Index" = (1:length(Y))[-partition])
+  centroids.dist <- predictions$MajorityVote$centroids.dist %>% as_tibble() %>% dplyr::mutate("Index" = (1:length(Y))[-partition])
+  mahalanobis.dist <- predictions$MajorityVote$mahalanobis.dist %>% as_tibble() %>% dplyr::mutate("Index" = (1:length(Y))[-partition])
+  all.dist <- list("max.dist" = max.dist, "centroids.dist" = centroids.dist, "mahalanobis.dist" = mahalanobis.dist)
   
-  # Identifying which samples were wrongly classified
-  assignations <- apply(max.dist, 2, function(x){x == Ytest}) %>% 
-    as_tibble() %>% dplyr::mutate(Index = (1:length(Y))[-partition] %>% as.matrix)
+  return("assignations" = all.dist)
+}
 
+# Perform iterations of the cross validation
+plsdaCV <- function(X, Y, my.partition){
+  plsAsses <- lapply(my.partition, function(partition){
+    plsAssignations(X, Y, partition = partition, ncompMax = 6)
+  })
+  fSplit <- rep(1:rep, length(Y)) %>% sort(.)
+  max.dist.Assign <- do.call(rbind, purrr::map(plsAsses, 1)) %>% split(max.dist.Assign, f = fSplit) %>% lapply(., function(x){x %>% arrange(Index) %>% dplyr::select(-Index)})
+  centroids.dist.Assign <- do.call(rbind, purrr::map(plsAsses, 2)) %>% split(max.dist.Assign, f = fSplit) %>% lapply(., function(x){x %>% arrange(Index) %>% dplyr::select(-Index)})
+  mahalanobis.dist.Assign <- do.call(rbind, purrr::map(plsAsses, 3)) %>% split(max.dist.Assign, f = fSplit) %>% lapply(., function(x){x %>% arrange(Index) %>% dplyr::select(-Index)})
+  names(max.dist.Assign) <- names(centroids.dist.Assign) <- names(mahalanobis.dist.Assign) <- paste0("rep", 1:length(max.dist.Assign))
+  all.dist.Assign <- list("max" = max.dist.Assign, "centroids" = centroids.dist.Assign, "mahalanobis" = mahalanobis.dist.Assign)
+  return(all.dist.Assign)
+}
+
+# Get errors from the outputs of plsdaCV
+getErrors <- function(assignations, Y){
+  
   # Confusion matrix for each distance
-  conf.matrix.max <- alply(max.dist, 2, function(X){table(X,Ytest)})
-  conf.matrix.centroids <- alply(centroids.dist, 2, function(X){table(X,Ytest)})
-  conf.matrix.mahalanobis <- alply(mahalanobis.dist, 2, function(X){table(X,Ytest)})
+  conf.matrix.max <- alply(assignations$max %>% dplyr::select(-Index) %>% as.matrix, 2, function(X){table(X,Y)})
+  conf.matrix.centroids <- alply(assignations$centroids %>% dplyr::select(-Index) %>% as.matrix, 2, function(X){table(X,Y)})
+  conf.matrix.mahalanobis <- alply(assignations$mahalanobis %>% dplyr::select(-Index) %>% as.matrix, 2, function(X){table(X,Y)})
   
   # Set class for ncomp optimization
   accuracyClass <- setClass("accuracy", slots = c(value = "list"))
@@ -372,8 +412,9 @@ plsdaMD <- function(X, Y, partition, ncompMax){
   accuracy <- do.call(rbind, accuracy@value) %>% set_rownames(., c("max", "centroids", "mahalanobis")) %>%
     t() %>% as.data.frame() %>% dplyr::mutate("Component" = paste0("Comp", 1:nrow(.)), .before = max)
   
-  return(list("BER" = BER, "accuracy" = accuracy, "ncompOptimal" = ncompOptimal, "assignations" = assignations))
+  return(list("BER" = BER, "accuracy" = accuracy, "ncompOptimal" = ncompOptimal))
 }
+
 
 #############################################################################################################
 # FUNCTIONS
