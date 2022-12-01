@@ -240,7 +240,7 @@ findOptimalN <- function(error){
 
 
 
-# 
+#
 # #
 data <- read_excel("./data.xlsx")
 X <- data[,-1]
@@ -265,13 +265,6 @@ if (crossVal == "loo") {perf_plsda <- perf(my_plsda, validation = "loo", progres
 if (crossVal == "Mfold") {perf_plsda <- perf(my_plsda, validation = "Mfold", progressBar = T)}
 
 
-library(splitTools)
-
-typePartition <- "blocked" # stratified, basic, grouped, blocked
-
-my.partition <- create_folds(y = Y, k = 7, m_rep = 10, type = typePartition)
-my.partition <- create_folds(y = Y, k = length(Y), m_rep = 1, type = typePartition)
-my.partition <- partition(y = Y, p = c(train = 0.7, valid = 0.3), type = typePartition)
 
 
 
@@ -285,55 +278,102 @@ my.partition <- partition(y = Y, p = c(train = 0.7, valid = 0.3), type = typePar
 
 
 
-library(caret); library(tidyverse); library(plyr)
+#############################################################################################################
+# PLS-DA construction
+#############################################################################################################
+
+# Load inputs
+library(caret); library(tidyverse); library(plyr); library(splitTools); library(foreach)
 Y <- data$Style %>% as.factor()
 X <- data[,-1] %>% scale()
 ncompMax <- 6 # Max number of components to optimize
+typePartition <- "stratified" # stratified, basic, grouped, blocked
+type <- "loo" # Mfold / loo
+k = 6
+rep = 10
 
-# Perform PLS-DA model
-my.plsda <- mixOmics::plsda(X,Y, ncomp = ncompMax, scale = F)
-predictions <- predict(my.plsda, X)
+# Partitions
+if (type == "loo") {
+  my.partition <- create_folds(y = Y, k = length(Y), m_rep = 1, type = typePartition)
+} else{
+  if (type == "Mfold") {
+    my.partition <- create_folds(y = Y, k = k, m_rep = rep, type = typePartition)
+  }
+}
 
-# Obtain predictions from different distances
-max.dist <- predictions$MajorityVote$max.dist
-centroids.dist <- predictions$MajorityVote$centroids.dist
-mahalanobis.dist <- predictions$MajorityVote$mahalanobis.dist
 
-# Confusion matrix for each distance
-conf.matrix.max <- alply(max.dist, 2, function(X){table(X,Y)}) 
-conf.matrix.centroids <- alply(centroids.dist, 2, function(X){table(X,Y)})
-conf.matrix.mahalanobis <- alply(mahalanobis.dist, 2, function(X){table(X,Y)})
+plsPerf <- lapply(my.partition, function(partition){
+  plsdaMD(X, Y, partition = partition, ncompMax = 6)
+})
+plsPerf$Fold1.Rep01
+plsPerf$Fold1.Rep02
 
-# Set class for ncomp optimization
-accuracyClass <- setClass("accuracy", slots = c(value = "list"))
-BERclass <- setClass("BER", slots = c(value = "list"))
+my.pls <- plsdaMD(X, Y, partition = partition, ncompMax = 6)
 
-# Obtain diagnostics for each distance
-BER <- BERclass(value = list("max.dist" = lapply(conf.matrix.max, BERF) %>% do.call(cbind,.),
-                "centroids.dist" = lapply(conf.matrix.centroids, BERF) %>% do.call(cbind,.),
-                "mahalanobis.dist" = lapply(conf.matrix.mahalanobis, BERF) %>% do.call(cbind,.)))
-accuracy <- accuracyClass(value = list("max.dist" = lapply(conf.matrix.max, accuracyF) %>% do.call(cbind, .),
-                  "centroids.dist" = lapply(conf.matrix.centroids, accuracyF) %>% do.call(cbind, .),
-                  "mahalanobis.dist" = lapply(conf.matrix.mahalanobis, accuracyF) %>% do.call(cbind, .)))
-
-# Calculate optimal ncomp according to the diagnostic
-noptimalBER <- findOptimalN(BER)
-noptimalAccuracy <- findOptimalN(accuracy)
-
-# Redefine variables -> results in a matrix
-BER <- do.call(rbind, BER@value) %>% set_rownames(., c("max", "centroids", "mahalanobis")) %>%
-  t() %>% as.data.frame() %>% dplyr::mutate("Component" = paste0("Comp", 1:nrow(.)))
-accuracy <- do.call(rbind, accuracy@value) %>% set_rownames(., c("max", "centroids", "mahalanobis")) %>%
-  t() %>% as.data.frame() %>% dplyr::mutate("Component" = paste0("Comp", 1:nrow(.)))
-
-diagnostics <- pivot_longer(BER, cols = -Component, names_to = "Distance") %>% as.data.frame()
-
-# Plot each diagnostic
-gg <- ggplot(data = diagnostics, aes(x = Component, y = value, group = Distance)) + 
-  geom_point(aes(color=Distance)) + 
+# Plot each diagnostic.
+diagnostic <- my.pls$BER
+diagnosticPlot <- pivot_longer(diagnostic, cols = -Component, names_to = "Distance") %>% as.data.frame()
+gg <- ggplot(data = diagnosticPlot, aes(x = Component, y = value, group = Distance)) +
+  geom_point(aes(color=Distance)) +
   geom_line(aes(color=Distance))
 gg
 
+
+partition <- my.partition$Fold001
+#############################################################################################################
+# PLSDA
+#############################################################################################################
+plsdaMD <- function(X, Y, partition, ncompMax){
+  
+  # Partitions
+  Xtrain <- X %>% as_tibble() %>% slice(partition)
+  Xtest <- X %>% as_tibble() %>% slice(-partition)
+  Ytrain <- Y[partition]
+  Ytest <- Y[-partition]
+
+  # Perform PLS-DA model
+  my.plsda <- mixOmics::plsda(Xtrain,Ytrain, ncomp = ncompMax, scale = F)
+  predictions <- predict(my.plsda, Xtest)
+  
+  # Obtain predictions from different distances
+  max.dist <- predictions$MajorityVote$max.dist
+  centroids.dist <- predictions$MajorityVote$centroids.dist
+  mahalanobis.dist <- predictions$MajorityVote$mahalanobis.dist
+  
+  # Identifying which samples were wrongly classified
+  assignations <- apply(max.dist, 2, function(x){x == Ytest}) %>% 
+    as_tibble() %>% dplyr::mutate(Index = (1:length(Y))[-partition] %>% as.matrix)
+
+  # Confusion matrix for each distance
+  conf.matrix.max <- alply(max.dist, 2, function(X){table(X,Ytest)})
+  conf.matrix.centroids <- alply(centroids.dist, 2, function(X){table(X,Ytest)})
+  conf.matrix.mahalanobis <- alply(mahalanobis.dist, 2, function(X){table(X,Ytest)})
+  
+  # Set class for ncomp optimization
+  accuracyClass <- setClass("accuracy", slots = c(value = "list"))
+  BERclass <- setClass("BER", slots = c(value = "list"))
+  
+  # Obtain diagnostics for each distance
+  BER <- BERclass(value = list("max.dist" = lapply(conf.matrix.max, BERF) %>% do.call(cbind,.),
+                               "centroids.dist" = lapply(conf.matrix.centroids, BERF) %>% do.call(cbind,.),
+                               "mahalanobis.dist" = lapply(conf.matrix.mahalanobis, BERF) %>% do.call(cbind,.)))
+  accuracy <- accuracyClass(value = list("max.dist" = lapply(conf.matrix.max, accuracyF) %>% do.call(cbind, .),
+                                         "centroids.dist" = lapply(conf.matrix.centroids, accuracyF) %>% do.call(cbind, .),
+                                         "mahalanobis.dist" = lapply(conf.matrix.mahalanobis, accuracyF) %>% do.call(cbind, .)))
+  
+  # Calculate optimal ncomp according to the diagnostic
+  noptimalBER <- findOptimalN(BER) %>% do.call(cbind,.)
+  noptimalAccuracy <- findOptimalN(accuracy) %>% do.call(cbind,.)
+  ncompOptimal <- rbind(noptimalBER, noptimalAccuracy) %>% set_rownames(c("BER", "Accuracy"))
+  
+  # Redefine variables -> results in a matrix
+  BER <- do.call(rbind, BER@value) %>% set_rownames(., c("max", "centroids", "mahalanobis")) %>%
+    t() %>% as.data.frame() %>% dplyr::mutate("Component" = paste0("Comp", 1:nrow(.)), .before = max)
+  accuracy <- do.call(rbind, accuracy@value) %>% set_rownames(., c("max", "centroids", "mahalanobis")) %>%
+    t() %>% as.data.frame() %>% dplyr::mutate("Component" = paste0("Comp", 1:nrow(.)), .before = max)
+  
+  return(list("BER" = BER, "accuracy" = accuracy, "ncompOptimal" = ncompOptimal, "assignations" = assignations))
+}
 
 #############################################################################################################
 # FUNCTIONS
@@ -366,7 +406,7 @@ findOptimalN <- function(objectOpt){
     if (min(opt) > 0.05) {
       ncomp = which(opt == min(opt))[1]
     }else{
-      ncomp = which(opt <= 0.05)[1] 
+      ncomp = which(opt <= 0.05)[1]
     }
     if(length(ncomp) > 1){ncomp = ncomp[1]}
     return(ncomp)
