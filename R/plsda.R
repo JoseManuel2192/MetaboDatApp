@@ -250,7 +250,7 @@ col.pch = col.pch(Y)
 sizeLabels = 3; sizePoints = 3; col = col.pch$co; pch = col.pch$pch; title = ""; sizeTitle = 30; Xcomp = 1; Ycomp = 2; Y;
 labels = "None"; sizeSegment = 0.1; declutterLabels = 10; showCentroid = F; showEllipses = F;
 sizeXYaxis = 12; sizeXYlabel = 12; sizeLegendTitle = 12; sizeLegendLevels = 12
-my_plsda <- mixOmics::plsda(X,Y, ncomp = 3)
+my_plsda <- mixOmics::plsda(X,Y, ncomp = 6)
 scatterData <- my_plsda$variates$X
 
 perf_plsda <- perf(my_plsda, validation = "loo", progressBar = T)
@@ -282,83 +282,72 @@ if (crossVal == "Mfold") {perf_plsda <- perf(my_plsda, validation = "Mfold", pro
 # PLS-DA construction
 #############################################################################################################
 
-# Load inputs
-library(caret); library(tidyverse); library(plyr); library(splitTools); library(foreach); library(magrittr)
+# ----------------- Load inputs ----------------- #
+library(caret); library(tidyverse); library(plyr); library(splitTools); library(foreach); library(magrittr); library(sjmisc)
+data <- read_excel("./data.xlsx")
 Y <- data$Style %>% as.factor()
 X <- data[,-1] %>% scale()
 ncompMax <- 6 # Max number of components to optimize
 typePartition <- "stratified" # stratified, basic, grouped, blocked
 type <- "Mfold" # Mfold / loo
 folds = 6
-rep = 30
+rep = 5
+classErrorPlot <- "Andalusian" # (For class error rate)
 
-# Partitions
+
+# ----------------- Partitions ----------------- #
 if (type == "loo") {
   folds <- length(Y)
   rep <- 1
   my.partition <- create_folds(y = Y, k = folds, m_rep = rep, type = typePartition)
 } else{
   if (type == "Mfold") {
-    my.partition <- create_folds(y = Y, k = k, m_rep = rep, type = typePartition)
+    my.partition <- create_folds(y = Y, k = folds, m_rep = rep, type = typePartition)
   }
 }
 
-# plsAsses <- lapply(my.partition, function(partition){
-#   plsAssignations(X, Y, partition = partition, ncompMax = 6)
-# })
-
-# Arrange lists with matrixes cointaining all the predicted labels
+# ----------------- PLS-DA perf: obtain assignation matrix ----------------- #
 plsdaPerf <- plsdaCV(X, Y, my.partition = my.partition)
 
-plsdaPerf$centroids$rep1
+# ----------------- Convert assignation matrix into diagnostics ----------------- #
+diagnostics <- list()
+for (i in 1:rep) {
+  diagnostics[[i]] <- getErrors(assignations = purrr:::map(plsdaPerf, i), Y = Y)
+}
+
+# ----------------- Get diagnostic means ----------------- #
+BERmean <- do.call(rbind, purrr::map(diagnostics, 1)) %>% group_by(Component) %>% summarise_each(.,funs(mean))
+classErrormean <- do.call(rbind, purrr::map(diagnostics, 2)) %>% dplyr::group_by(distance, class) %>% summarise_each(.,funs(mean)) %>% arrange(class)
+classErrormeanPlot <- classErrormean %>% filter(class == classErrorPlot) %>% dplyr::select(-class) %>% rotate_df(rn = "Component", cn = T) %>% slice(-1) %>% as_tibble() 
+Accuracymean <- do.call(rbind, purrr::map(diagnostics, 3)) %>% group_by(Component) %>% summarise_each(.,funs(mean))
+# ----------------- Plot each diagnostic mean ----------------- #
+plotDiagnostic(BERmean, "BER")
+plotDiagnostic(classErrormeanPlot, paste0("Class Error of ", classErrorPlot, " class"))
+plotDiagnostic(Accuracymean, "Accuracy")
 
 
+# ----------------- Calculate optimal ncomp according to each diagnostic ----------------- #
+noptimalBER <- findOptimalN(BERmean, "min")
+noptimalAccuracy <- findOptimalN(Accuracymean, "max")
+ncompOptimal <- rbind(noptimalBER, noptimalAccuracy) %>% set_rownames(c("BER", "Accuracy"))
 
-
-
-
-
-
-
-
-
-getErrors(assignations = purrr:::map(all.dist.Assign, 1), Y = Y)
-
-library(mixOmics)
-my.plsda <- plsda(X, Y, ncomp = ncompMax)
-perfPLSDA <- perf(my.plsda, validation = "loo", progressBar = T)
-perfPLSDA$error.rate
-
-
-# Plot each diagnostic.
-diagnostic <- my.pls$BER
-diagnosticPlot <- pivot_longer(diagnostic, cols = -Component, names_to = "Distance") %>% as.data.frame()
-gg <- ggplot(data = diagnosticPlot, aes(x = Component, y = value, group = Distance)) +
-  geom_point(aes(color=Distance)) +
-  geom_line(aes(color=Distance))
-gg
-
-
-partition <- my.partition$Fold001
-partition <- my.partition$Fold001[-c(1:6)]
-my.pls <- plsAssignations(X, Y, partition = partition, ncompMax = 6)
-my.pls
 #############################################################################################################
 # PLSDA
 #############################################################################################################
+# FUNCTION: extract assignation from PLS-DA
 plsAssignations <- function(X, Y, partition, ncompMax){
   
-  # Partitions
+  # ----------------- Partitions ----------------- #
   Xtrain <- X %>% as_tibble() %>% slice(partition)
   Xtest <- X %>% as_tibble() %>% slice(-partition)
   Ytrain <- Y[partition]
   Ytest <- Y[-partition]
 
-  # Perform PLS-DA model
+  # ----------------- Perform PLS-DA model ----------------- #
   my.plsda <- mixOmics::plsda(Xtrain,Ytrain, ncomp = ncompMax, scale = F)
   predictions <- predict(my.plsda, Xtest)
   
-  # Obtain predictions from different distances
+  # ----------------- Obtain predictions from different distances ----------------- #
   max.dist <- predictions$MajorityVote$max.dist %>% as_tibble() %>% dplyr::mutate("Index" = (1:length(Y))[-partition])
   centroids.dist <- predictions$MajorityVote$centroids.dist %>% as_tibble() %>% dplyr::mutate("Index" = (1:length(Y))[-partition])
   mahalanobis.dist <- predictions$MajorityVote$mahalanobis.dist %>% as_tibble() %>% dplyr::mutate("Index" = (1:length(Y))[-partition])
@@ -366,8 +355,7 @@ plsAssignations <- function(X, Y, partition, ncompMax){
   
   return("assignations" = all.dist)
 }
-
-# Perform iterations of the cross validation
+# FUNCTION: perform iterations of the cross validation
 plsdaCV <- function(X, Y, my.partition){
   plsAsses <- lapply(my.partition, function(partition){
     plsAssignations(X, Y, partition = partition, ncompMax = 6)
@@ -380,52 +368,43 @@ plsdaCV <- function(X, Y, my.partition){
   all.dist.Assign <- list("max" = max.dist.Assign, "centroids" = centroids.dist.Assign, "mahalanobis" = mahalanobis.dist.Assign)
   return(all.dist.Assign)
 }
-
-# Get errors from the outputs of plsdaCV
+# FUNCTION: get errors from the outputs of plsdaCV
 getErrors <- function(assignations, Y){
   
-  # Confusion matrix for each distance
-  conf.matrix.max <- alply(assignations$max %>% dplyr::select(-Index) %>% as.matrix, 2, function(X){table(X,Y)})
-  conf.matrix.centroids <- alply(assignations$centroids %>% dplyr::select(-Index) %>% as.matrix, 2, function(X){table(X,Y)})
-  conf.matrix.mahalanobis <- alply(assignations$mahalanobis %>% dplyr::select(-Index) %>% as.matrix, 2, function(X){table(X,Y)})
+  # ----------------- Confusion matrix for each distance ----------------- #
+  conf.matrix.max <- alply(assignations$max %>% as.matrix, 2, function(X){table(X,Y)})
+  conf.matrix.centroids <- alply(assignations$centroids %>% as.matrix, 2, function(X){table(X,Y)})
+  conf.matrix.mahalanobis <- alply(assignations$mahalanobis %>% as.matrix, 2, function(X){table(X,Y)})
   
-  # Set class for ncomp optimization
-  accuracyClass <- setClass("accuracy", slots = c(value = "list"))
-  BERclass <- setClass("BER", slots = c(value = "list"))
-  
-  # Obtain diagnostics for each distance
-  BER <- BERclass(value = list("max.dist" = lapply(conf.matrix.max, BERF) %>% do.call(cbind,.),
+  # ----------------- Obtain diagnostics for each distance ----------------- #
+  BER <- list("max.dist" = lapply(conf.matrix.max, BERF) %>% do.call(cbind,.),
                                "centroids.dist" = lapply(conf.matrix.centroids, BERF) %>% do.call(cbind,.),
-                               "mahalanobis.dist" = lapply(conf.matrix.mahalanobis, BERF) %>% do.call(cbind,.)))
-  accuracy <- accuracyClass(value = list("max.dist" = lapply(conf.matrix.max, accuracyF) %>% do.call(cbind, .),
+                               "mahalanobis.dist" = lapply(conf.matrix.mahalanobis, BERF) %>% do.call(cbind,.))
+  classError <- list("max.dist" = lapply(conf.matrix.max, ClassErrorF) %>% do.call(cbind, .) %>% set_colnames(paste0("Comp", 1:ncol(.))),
+                   "centroids.dist" = lapply(conf.matrix.centroids, ClassErrorF) %>% do.call(cbind, .) %>% set_colnames(paste0("Comp", 1:ncol(.))),
+                   "mahalanobis.dist" = lapply(conf.matrix.mahalanobis, ClassErrorF) %>% do.call(cbind, .) %>% set_colnames(paste0("Comp", 1:ncol(.))))
+  accuracy <- list("max.dist" = lapply(conf.matrix.max, accuracyF) %>% do.call(cbind, .),
                                          "centroids.dist" = lapply(conf.matrix.centroids, accuracyF) %>% do.call(cbind, .),
-                                         "mahalanobis.dist" = lapply(conf.matrix.mahalanobis, accuracyF) %>% do.call(cbind, .)))
+                                         "mahalanobis.dist" = lapply(conf.matrix.mahalanobis, accuracyF) %>% do.call(cbind, .))
   
-  # Calculate optimal ncomp according to the diagnostic
-  noptimalBER <- findOptimalN(BER) %>% do.call(cbind,.)
-  noptimalAccuracy <- findOptimalN(accuracy) %>% do.call(cbind,.)
-  ncompOptimal <- rbind(noptimalBER, noptimalAccuracy) %>% set_rownames(c("BER", "Accuracy"))
-  
-  # Redefine variables -> results in a matrix
-  BER <- do.call(rbind, BER@value) %>% set_rownames(., c("max", "centroids", "mahalanobis")) %>%
+  # ----------------- Redefine variables -> results in a matrix ----------------- #
+  BER <- do.call(rbind, BER) %>% set_rownames(., c("max", "centroids", "mahalanobis")) %>%
     t() %>% as.data.frame() %>% dplyr::mutate("Component" = paste0("Comp", 1:nrow(.)), .before = max)
-  accuracy <- do.call(rbind, accuracy@value) %>% set_rownames(., c("max", "centroids", "mahalanobis")) %>%
+  classError <- classError %>% purrr::map(., function(x) apply(x, 2, unlist)) %>% do.call(rbind, .) %>% as.data.frame() %>%
+    dplyr::mutate(., "class" = rep(rownames(.)[1:nlevels(Y)], 3)) %>% as_tibble() %>%
+    dplyr::mutate(., "distance" = c(rep("max", nlevels(Y)), rep("centroid", nlevels(Y)), rep("mahalanobis", nlevels(Y)))) %>% arrange(class)
+  accuracy <- do.call(rbind, accuracy) %>% set_rownames(., c("max", "centroids", "mahalanobis")) %>%
     t() %>% as.data.frame() %>% dplyr::mutate("Component" = paste0("Comp", 1:nrow(.)), .before = max)
-  
-  return(list("BER" = BER, "accuracy" = accuracy, "ncompOptimal" = ncompOptimal))
+    
+  return(list("BER" = BER, "classError" = classError, "accuracy" = accuracy))
 }
-
-
-#############################################################################################################
-# FUNCTIONS
-#############################################################################################################
-# Function extract accuracy from confusion matrix
+# FUNCTION: extract accuracy from confusion matrix
 accuracyF <- function(conf.matrix){
   cp <- 0
   for (i in 1:nrow(conf.matrix)) {cp <- conf.matrix[i,i] %>% sum(., cp)}
   cp / sum(conf.matrix)
 }
-# Function extract BER from confussion matrix
+# FUNCTION: extract BER from confussion matrix
 BERF <- function(conf.matrix){
   BERclass <- list()
   for (i in 1:ncol(conf.matrix)) {
@@ -436,14 +415,26 @@ BERF <- function(conf.matrix){
   BER <- do.call(cbind, BERclass) %>% mean()
   return(BER)
 }
-# Find optimal number of components
-findOptimalN <- function(objectOpt){
-  if (objectOpt@class[[1]] == "BER") {
-    opt <- objectOpt@value
-  }else{
-    opt <- lapply(objectOpt@value, function(x) 1-x)
+# Class error
+# ClassError(conf.matrix.max$`1`) %>% set_names(conf.matrix.max$`1` %>% colnames())
+ClassErrorF <- function(conf.matrix){
+  BERclass <- list()
+  for (i in 1:ncol(conf.matrix)) {
+    wrong <- conf.matrix[-i,i] %>% sum
+    total <- sum(conf.matrix[,i])
+    BERclass[[i]] <- wrong / total %>% as.numeric()
   }
-  lapply(opt, function(opt){
+  BERclass <- BERclass %>% set_names(conf.matrix %>% colnames()) 
+  return(BERclass)
+}
+# FUNCTION: Find optimal number of components
+findOptimalN <- function(objectOpt, objective){
+  if (objective == "min") {
+    opt <- objectOpt[,-1]
+  }else{
+    opt <- apply(objectOpt[,-1], 2, function(x) 1-x)
+  }
+  apply(opt, 2, function(opt){
     if (min(opt) > 0.05) {
       ncomp = which(opt == min(opt))[1]
     }else{
@@ -453,35 +444,14 @@ findOptimalN <- function(objectOpt){
     return(ncomp)
   })
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# correctClass <- purrr::map(predictions, function(X){which(X == Y)})
-# wrongClass <- purrr::map(predictions, function(X){which(X != Y)})
-# conf.matrix <- purrr::map(max.dist, function(X){table(X,Y)})
-
-
-# diagnostics <- cbind("BER" = c(BER@value), "accuracy" = c(accuracy@value)) %>% as.data.frame()
-# diagnostics <- diagnostics %>% mutate(., "Component" = paste0("Comp", 1:nrow(diagnostics))) 
-# diagnosticPlot <- diagnostics %>% pivot_longer(cols = -Component, names_to = "Diagnostic")
-
-# library(foreach)
-# predictions <- foreach(ncomp = 1:ncompMax) %do% {
-#   model <- modelSelected(x = X, y = Y, ncomp = ncomp, probMethod = methodPLS)
-#   predict(model, newdata = X)
-# }
+# FUNCTION: plot the diagnostics along the components
+plotDiagnostic <- function(diagnostic, title = ""){
+  diagnosticPlot <- pivot_longer(diagnostic, cols = -Component, names_to = "Distance") %>% as.data.frame()
+  gg <- ggplot(data = diagnosticPlot, aes(x = Component, y = value, group = Distance)) +
+    geom_point(aes(color=Distance)) +
+    geom_line(aes(color=Distance)) + 
+    ggtitle(title) +
+    theme(title = element_text(size = 10)) +
+    theme(plot.title = element_text(hjust = 0.5))
+  gg
+}
