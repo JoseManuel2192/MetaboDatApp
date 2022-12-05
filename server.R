@@ -364,7 +364,7 @@ server = function(input, output){
   ########################################
   # OUTPUT: BARPLOT
   ########################################
-  plsdaServer("plsdaScores", X = X(), Y = Y(), col.pch = col.pch())
+  plsdaServer("plsdaScores", X = X() %>% scale(), Y = Y() %>% as.factor(), col.pch = col.pch())
   
   ##########################
   # Reset buttons
