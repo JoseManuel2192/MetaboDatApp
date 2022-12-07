@@ -39,25 +39,32 @@ plsdaUI <- function(id) {
                                       sizeSegment = ns("sizeSegment"), showCentroid = ns("showCentroid"), showEllipses = ns("showEllipses"),  sizeXYlabel = ns("sizeXYlabel")
                                     ),
                                     ns = ns
-                   )                 
+                   ),
+                   conditionalPanel(condition = "input.PLSDA == 3",
+                                    fluidRow(
+                                      column(6, numericInput(ns("heightPredPlot"), "Height Plot", value = 900, step = 100, min = 0)), 
+                                      column(6, numericInput(ns("widthPredPlot"), "Width Plot", value = 600, step = 100, min = 0)) 
+                                    ),
+                                    ns = ns
+                   )
       ),
       mainPanel(width = 9,
                 tabsetPanel(id = ns("PLSDA"),
-                            tabPanel("Optimization & Validation",
+                            tabPanel("Optimization & Validation", value = 1, align = "center",
                                      fluidRow(
                                        column(5, withSpinner(plotOutput(ns("errorRate")), type = 4, size = 1)),
                                        column(7, withSpinner(plotOutput(ns("accuracy")), type = 4, size = 1))
                                      ),
-                                     withSpinner(plotOutput(ns("classError")), type = 4, size = 1),
-                                     value = 1, align = "center"
+                                     withSpinner(plotOutput(ns("classError")), type = 4, size = 1)
+                                     
                             ),
                             # column(6, withSpinner(tableOutput(ns("errorclassTable")), type = 4, size = 1))
-                            tabPanel("Scores Plot",
-                                     plotOutput(ns("scatterPlot")), value = 2
+                            tabPanel("Scores Plot", value = 2,
+                                     plotOutput(ns("scatterPlot"))
                             ),
-                            tabPanel("Debugging panel",
-                                     tableOutput(ns("Debugging")), value = 3
-                                     # plotOutput(ns("predictionsPlot"))
+                            tabPanel("Debugging panel", value = 3,
+                                     # tableOutput(ns("Debugging")), value = 3
+                                     plotOutput(ns("predictionsPlot"))
                             )
                 )
       )
@@ -191,7 +198,7 @@ plsdaServer <- function(id, X, Y, col.pch) {
       
       output$predictionsPlot <- renderPlot({
         dist <- "max.dist.predictions"
-        id = Y
+        idc = Y
         ncompOpt = 4
         Y <- Y %>% as.factor()
         req(input$runPLSDAopt)
@@ -199,46 +206,49 @@ plsdaServer <- function(id, X, Y, col.pch) {
         folds <- my.partition$folds
         rep <- my.partition$rep
         plsdaPerf <- plsdaCV(X = X, Y = Y, rep = rep, partition = my.partition$partition, ncompMax = input$ncompMax)
-        
-        predictions <- getPredictionMatrices(plsdaPerf = plsdaPerf, Y = Y, ncompOpt = ncompOpt, dist = dist, id = id)
+
+        predictions <- getPredictionMatrices(plsdaPerf = plsdaPerf, Y = Y, ncompOpt = ncompOpt, dist = dist, IDshow = idc)
         colourPredictions <- pivot_longer(predictions$colours, cols = -c(ID, order))
-        dataPredictions <- pivot_longer(predictions$predictionSummary, cols = -c(ID, order)) %>% 
+        dataPredictions <- pivot_longer(predictions$predictionSummary, cols = -c(ID, order)) %>%
           mutate(dataPredictions, ID = factor(ID, levels = unique(ID)))
-        
+
         Ymeans <- calculateMeans(rep = rep, Y = dataPredictions$name %>% as.factor())
         dataPredictions <- dataPredictions %>% mutate(.,"mean" = Ymeans) %>% mutate(., "min" = mean - value/2, "max" = mean + value/2) %>%
           mutate(., "colour" = colourPredictions %>% pull(value)) %>% arrange(name)
-        
-        sizeYaxis = 5
+
+        sizeYaxis = 3
         sizeXaxis = 10
         sizeLegendTitle = 16
         sizeLegendLevels = 14
         sizeSegment = 3
-        
-        predictionPlot(dataPredictions, sizeXaxis, sizeYaxis, sizeLegendTitle, sizeLegendLevels, sizeSegment)  
-      })
 
-      output$Debugging <- renderTable({
-        req(input$runPLSDAopt)
-        dist <- "max.dist.predictions"
-        id = Y
-        Y <- Y %>% as.factor()
-        req(input$runPLSDAopt)
-        my.partition <- doPartition(Y = Y, type = input$type, typePartition = input$typePartition, folds = input$folds, rep = input$rep)
-        folds <- my.partition$folds
-        rep <- my.partition$rep
-        plsdaPerf <- plsdaCV(X = X, Y = Y, rep = rep, partition = my.partition$partition, ncompMax = input$ncompMax)
-        
-        predictions <- getPredictionMatrices(plsdaPerf = plsdaPerf, Y = Y, ncompOpt = input$ncompOpt, dist = dist, id = id)
-        colourPredictions <- pivot_longer(predictions$colours, cols = -c(ID, order))
-        dataPredictions <- pivot_longer(predictions$predictionSummary, cols = -c(ID, order)) %>% 
-          mutate(dataPredictions, ID = factor(ID, levels = unique(ID)))
-        
-        Ymeans <- calculateMeans(rep = rep, Y = dataPredictions$name %>% as.factor())
-        dataPredictions <- dataPredictions %>% mutate(.,"mean" = Ymeans) %>% mutate(., "min" = mean - value/2, "max" = mean + value/2) %>%
-          mutate(., "colour" = colourPredictions %>% pull(value)) %>% arrange(name)
-        predictions$predictionSummary
-      })
+        predictionPlot(dataPredictions, Y, sizeXaxis, sizeYaxis, sizeLegendTitle, sizeLegendLevels, sizeSegment, rep)
+      }, res = 150,
+      height = reactive(input$heightPredPlot),
+      width = reactive(input$widthPredPlot)
+      )
+
+      # output$Debugging <- renderTable({
+      #   req(input$runPLSDAopt)
+      #   dist <- "max.dist.predictions"
+      #   IDshow = Y
+      #   Y <- Y %>% as.factor()
+      #   req(input$runPLSDAopt)
+      #   my.partition <- doPartition(Y = Y, type = input$type, typePartition = input$typePartition, folds = input$folds, rep = input$rep)
+      #   folds <- my.partition$folds
+      #   rep <- my.partition$rep
+      #   plsdaPerf <- plsdaCV(X = X, Y = Y, rep = rep, partition = my.partition$partition, ncompMax = input$ncompMax)
+      #   
+      #   predictions <- getPredictionMatrices(plsdaPerf = plsdaPerf, Y = Y, ncompOpt = input$ncompOpt, dist = dist, IDshow = IDshow)
+      #   colourPredictions <- pivot_longer(predictions$colours, cols = -c(ID, order))
+      #   dataPredictions <- pivot_longer(predictions$predictionSummary, cols = -c(ID, order)) %>% 
+      #     mutate(dataPredictions, ID = factor(ID, levels = unique(ID)))
+      #   
+      #   Ymeans <- calculateMeans(rep = rep, Y = dataPredictions$name %>% as.factor())
+      #   dataPredictions <- dataPredictions %>% mutate(.,"mean" = Ymeans) %>% mutate(., "min" = mean - value/2, "max" = mean + value/2) %>%
+      #     mutate(., "colour" = colourPredictions %>% pull(value)) %>% arrange(name)
+      #   predictions$predictionSummary
+      # })
 
     }
   )
@@ -460,7 +470,7 @@ plotDiagnostic <- function(diagnostic, title = "", show.legend = T, show.sd = F)
 }
 
 # FUNCTION: extract matrices for prediction plot
-getPredictionMatrices <- function(plsdaPerf, Y, ncompOpt, dist, id){
+getPredictionMatrices <- function(plsdaPerf, Y, ncompOpt, dist, IDshow){
   predictions <- purrr::map(plsdaPerf, function(x){purrr::map(x, function(x) {
     x <- x %>% as_tibble() %>% dplyr::select(any_of(ncompOpt)) %>% cbind(as_tibble(Y)) %>% dplyr::arrange(., value) %>% dplyr::pull(1) %>% as.character()
   })})
@@ -473,9 +483,9 @@ getPredictionMatrices <- function(plsdaPerf, Y, ncompOpt, dist, id){
     mahalanobis.dist.predictions[[i]] <- purrr::map(predictions$mahalanobis, i) %>% do.call(cbind, .)
   }
   all.predictions <- list(
-    "max.dist.predictions" = do.call(rbind, max.dist.predictions) %>% set_rownames(Y) %>% as_tibble(),
-    "centroids.dist.predictions" = do.call(rbind, centroids.dist.predictions) %>% set_rownames(Y) %>% as_tibble(),
-    "mahalanobis.dist.predictions" = do.call(rbind, mahalanobis.dist.predictions) %>% set_rownames(Y) %>% as_tibble()
+    "max.dist.predictions" = do.call(rbind, max.dist.predictions) %>% as_tibble(),
+    "centroids.dist.predictions" = do.call(rbind, centroids.dist.predictions) %>% as_tibble(),
+    "mahalanobis.dist.predictions" = do.call(rbind, mahalanobis.dist.predictions) %>% as_tibble()
   )
   
   dist.prediction.selected <- all.predictions %>% extract2(dist)
@@ -485,7 +495,7 @@ getPredictionMatrices <- function(plsdaPerf, Y, ncompOpt, dist, id){
       sumLevels[i] <- sum(x == levels(Y)[i])
     }
     return(sumLevels)
-  }) %>% t() %>% set_colnames(levels(Y)) %>% as_tibble() %>% dplyr::mutate(., "ID" = id, "order" = 1:length(Y))
+  }) %>% t() %>% set_colnames(levels(Y)) %>% as_tibble() %>% dplyr::mutate(., "ID" = IDshow, "order" = 1:length(Y))
   
   colours <- predictionSummary %>% cbind(., Y)  
   for (i in 1:nlevels(Y)) {
@@ -514,12 +524,11 @@ calculateMeans <- function(rep, Y){
   return(Ymeans)
 }
 # FUNCTION: Prediction plot
-predictionPlot <- function(dataPredictions, sizeXaxis, sizeYaxis, sizeLegendTitle, sizeLegendLevels, sizeSegment){
-  dataPredictions <- dataPredictions %>% mutate(ID = as.character(ID))
+predictionPlot <- function(dataPredictions, Y, sizeXaxis, sizeYaxis, sizeLegendTitle, sizeLegendLevels, sizeSegment, rep){
   breaksPlot <- dataPredictions$mean %>% as.factor() %>% levels() %>% as.numeric()
   pp <- ggplot(dataPredictions) +
     geom_segment(aes(x = min, y = order, xend = max, yend = order, color = colour), size = sizeSegment) + 
-    scale_y_discrete() +
+    scale_y_continuous(breaks = dataPredictions$order, labels = dataPredictions$ID) +
     scale_x_continuous(breaks = breaksPlot, labels = levels(Y)) +
     scale_color_manual(values = c("darkgreen", "darkred")) +
     theme_bw() +
@@ -531,8 +540,8 @@ predictionPlot <- function(dataPredictions, sizeXaxis, sizeYaxis, sizeLegendTitl
     xlab("")
   
   cutoffX = 1; cutoffY = 0
-  for (i in 1:(nlevels(Y)-1)) {
-    cutoffY <- cutoffY + summary(Y)[i]
+  for (i in 1:(nlevels(as.factor(Y))-1)) {
+    cutoffY <- cutoffY + summary(as.factor(Y))[i]
     if (i > 1) {incr = rep + 0.5} else{incr = rep}
     cutoffX <- cutoffX + incr  
     pp <- pp + geom_hline(yintercept = cutoffY + 0.5, linetype = "dashed")
