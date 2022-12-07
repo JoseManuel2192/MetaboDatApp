@@ -22,7 +22,7 @@ server = function(input, output){
   levelsRM <- reactive({
     levels <- 10000000
     if (isTruthy(input$removeLevel)) {
-      if (input$removeClass == "None") {levels <- 10000000}else{
+      if (input$removeClass == "None") {levels <- 10000000} else{
         factor <- inputData() %>% dplyr::select(input$removeClass) %>% unlist() %>% as.character()
         levels <- which(factor %in% input$removeLevel)
       }

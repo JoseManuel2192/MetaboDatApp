@@ -13,15 +13,18 @@ plsdaUI <- function(id) {
                                       column(6, selectInput(ns("type"), "Cross Validation re-sampling", choices = c("loo", "Mfold"), selected = "loo"))
                                     ),
                                     uiOutput(ns("uitypePartition")),
-                                    # selectInput(ns("typePartition"), "Select partition", choices = NULL),
                                     fluidRow(
                                       column(6, uiOutput(ns("uifolds"))),
                                       column(6, uiOutput(ns("uirep")))
                                     ),
-                                    actionButton(ns("runPLSDAopt"), "Run cross-validation: component optimization"),
-                                    br(), 
+                                    uiOutput(ns("uiclassErrorSelection")),
+                                    actionButton(ns("runPLSDAopt"), "Run cross-validation"),
+                                    br(), br(),
                                     uiOutput(ns("uincompOpt")),
-                                    ns = ns
+                                    h4("....................................................."),
+                                    tableOutput(ns("optimalN")),
+                                    # h4("....................................................."),
+                                    ns = ns, align = "center"
                    ),
                    
                    # Panel for scores plot
@@ -40,21 +43,22 @@ plsdaUI <- function(id) {
       ),
       mainPanel(width = 9,
                 tabsetPanel(id = ns("PLSDA"),
-                  tabPanel("Optimization & Validation",
-                           fluidRow(
-                             column(5, withSpinner(plotOutput(ns("errorRate")), type = 4, size = 1)),
-                             column(7, withSpinner(plotOutput(ns("accuracy")), type = 4, size = 1))
-                           ),
-                           withSpinner(plotOutput(ns("classError")), type = 4, size = 1),
-                           value = 1
-                  ),
-                  
-                  tabPanel("Scores Plot",
-                           plotOutput(ns("scatterPlot")), value = 2
-                  ),
-                  tabPanel("Debugging panel",
-                           tableOutput(ns("Debugging")), value = 3
-                  )
+                            tabPanel("Optimization & Validation",
+                                     fluidRow(
+                                       column(5, withSpinner(plotOutput(ns("errorRate")), type = 4, size = 1)),
+                                       column(7, withSpinner(plotOutput(ns("accuracy")), type = 4, size = 1))
+                                     ),
+                                     withSpinner(plotOutput(ns("classError")), type = 4, size = 1),
+                                     value = 1, align = "center"
+                            ),
+                            # column(6, withSpinner(tableOutput(ns("errorclassTable")), type = 4, size = 1))
+                            tabPanel("Scores Plot",
+                                     plotOutput(ns("scatterPlot")), value = 2
+                            ),
+                            tabPanel("Debugging panel",
+                                     tableOutput(ns("Debugging")), value = 3
+                                     # plotOutput(ns("predictionsPlot"))
+                            )
                 )
       )
     )
@@ -66,11 +70,10 @@ plsdaServer <- function(id, X, Y, col.pch) {
     id,
     function(input, output, session) {
       
-      output$Debugging <- renderTable({
-      # do.call(rbind, purrr::map(diagnosticValues$data, 1)) %>% group_by(Component) %>% summarise_each(.,mean)
-        # purrr::map(diagnosticValues$data, 1)
-        # cbind(Y,X)
-      })
+      # output$Debugging <- renderTable({
+      #   req(input$runPLSDAopt)
+      #   ncompOptimal$data
+      # })
       
       output$uincompMax <- renderUI({
         valueProp <- c(ncol(X), nrow(Y)) %>% max()
@@ -83,7 +86,7 @@ plsdaServer <- function(id, X, Y, col.pch) {
       })
       output$uirep <- renderUI({
         req(input$type)
-        if (input$type  == "Mfold") {numericInput(session$ns("rep"), "Repetitions", value = 30, min = 1, step = 5)}
+        if (input$type  == "Mfold") {numericInput(session$ns("rep"), "Repetitions", min = 0, value = 30, step = 10)}
       })
       
       output$uitypePartition <- renderUI({
@@ -112,67 +115,131 @@ plsdaServer <- function(id, X, Y, col.pch) {
       output$errorRate <- renderPlot({
         req(input$runPLSDAopt)
         BERmean$data <- do.call(rbind, purrr::map(diagnosticValues$data, 1)) %>% group_by(Component) %>% summarise_each(.,mean)
-        plotDiagnostic(BERmean$data, "BER", show.legend = F)
-      }, width = 500, height = 300, res = 120)
+        plotDiagnostic(BERmean$data, "BER", show.legend = F, show.sd)
+      }, width = 500, height = 400, res = 120)
       
       # Render error rate plot
+      accuracyMean <- reactiveValues(data = NULL)
       output$accuracy <- renderPlot({
         req(input$runPLSDAopt)
-        accuracyMean <- do.call(rbind, purrr::map(diagnosticValues$data, 3)) %>% group_by(Component) %>% summarise_each(.,mean)
-        plotDiagnostic(accuracyMean, "Accuracy")
-      }, width = 630, height = 300, res = 120)
+        accuracyMean$data <- do.call(rbind, purrr::map(diagnosticValues$data, 3)) %>% group_by(Component) %>% summarise_each(.,mean)
+        plotDiagnostic(accuracyMean$data, "Accuracy")
+      }, width = 630, height = 400, res = 120)
       
       # Render error rate plot
+      classErrorMean <- reactiveValues(data = NULL)
       output$classError <- renderPlot({
         req(input$runPLSDAopt)
-        classErrorPlot <- "Andalusian"
-        classErrorMean <- do.call(rbind, purrr::map(diagnosticValues$data, 2)) %>% dplyr::group_by(distance, class) %>% summarise_each(.,funs(mean)) %>% arrange(class) %>%
-          filter(class == classErrorPlot) %>% dplyr::select(-class) %>% remove_rownames %>% column_to_rownames(var="distance") %>% rotate_df(rn = "Component") %>% as_tibble() %>%
-          mutate(Component = as.numeric(Component))
-        plotDiagnostic(classErrorMean, "Target class error")
-      }, width = 800, height = 300, res = 120)
+        classErrorMean$data <- do.call(rbind, purrr::map(diagnosticValues$data, 2)) %>% dplyr::group_by(distance, class) %>% summarise_each(.,mean) %>% arrange(class) %>%
+          filter(class == input$classErrorSelection) %>% dplyr::select(-class) %>% remove_rownames %>% column_to_rownames(var="distance") %>% rotate_df(rn = "Component") %>% as_tibble() %>%
+          dplyr::mutate(Component = as.numeric(Component))
+        plotDiagnostic(classErrorMean$data, str_glue("{input$classErrorSelection} class error"))
+      }, width = 630, height = 400, res = 120)
 
-      # Optimal number of component
-      # optimalN <- reactive({
-      #   req(perf_plsda$perf)
-      #   error <- perf_plsda$perf$error.rate$BER %>% as.data.frame() %>% dplyr::select(mahalanobis.dist) 
-      #   findOptimalN(error) %>% as.numeric()
-      # })
+      # UI: class error to show
+        output$uiclassErrorSelection <- renderUI({
+          selectInput(session$ns("classErrorSelection"), "Error by class", choices = levels(Y))
+        })
       
+      # UI: optimal number of components
+      
+      # Optimal number of components
+        ncompOptimal <- reactive({
+          noptimalBER <- findOptimalN(BERmean$data, "min")
+          noptimalErrorClass <- findOptimalN(classErrorMean$data, "min")
+          noptimalAccuracy <- findOptimalN(accuracyMean$data, "max")
+          rbind(noptimalBER, noptimalErrorClass, noptimalAccuracy) %>%
+            set_rownames(c("BER", str_glue("Error {input$classErrorSelection} class"), "Accuracy"))
+        })
+        
+        output$optimalN <- renderTable({
+          req(input$runPLSDAopt)
+          ncompOptimal() 
+        })
+
       # Select optimum number of components (automatic suggestion)
-      # output$uincompOpt <- renderUI({
-      #   req(perf_plsda$perf)
-      #   # Building choices from perf_plsda. Thus it changes whether perf_plsda changes
-      #   choicesComp <- paste0(1:(perf_plsda$perf$error.rate.class$mahalanobis.dist %>% ncol()), " components")
-      #   selectInput(session$ns("ncompOpt"), "Optimum N comp (suggested)", choices = choicesComp, selected = choicesComp[optimalN()])
-      # })
+      output$uincompOpt <- renderUI({
+        req(input$runPLSDAopt)
+        selectInput(session$ns("ncompOpt"), "Optimum N comp", choices = 1:input$ncompMax, selected = ncompOptimal()[1,1])
+      })
       
-      # output$prueba <- renderTable({input$ncompOpt})
+      output$errorclassTable <- renderTable({
+        req(input$runPLSDAopt)
+        classErrorMean$data
+      })
       
-      # output$scatterPlot <- renderPlot({
-      #   # observeEvent(input$runPLSDAopt, {
-      #   # my_plsda <- mixOmics::plsda(X,Y, ncomp = input$ncompOpt)
-      #   
-      #   req(perf_plsda$perf)
-      #   optComp <- gsub(x = input$ncompOpt, pattern = " components", replacement = "") %>% as.numeric()
-      #   my_plsda <- mixOmics::plsda(X,Y, ncomp = optComp)
-      #   scatterData <- my_plsda$variates$X
-      #   
-      #   expl.variance <- my_plsda$prop_expl_var$X * 100
-      #   names(expl.variance) <- gsub("comp", x = expl.variance %>% names(), replacement = "PC")
-      #   colnames(scatterData) = paste0(names(expl.variance), ": ", as.character(round(expl.variance, 2)), 
-      #                                   c("% of explained variance"))
-      #   
-      #   plotScores <- scatterPlotPLS(scatterData = scatterData, Xcomp = input$comp1, Ycomp = input$comp2, title = input$title, sizeTitle = input$sizeTitle,
-      #               sizeLabels = input$sizeLabels, sizePoints = input$sizePoints, sizeXYaxis = input$sizeXYaxis, sizeXYlabel = input$sizeXYlabel,
-      #               sizeLegendTitle = input$sizeLegendTitle, sizeLegendLevels = input$sizeLegendLevels, declutterLabels = input$declutterLabels,
-      #               sizeSegment = input$sizeSegment, showCentroid = input$showCentroid, showEllipses = input$showEllipses, Y = Y, labels = "None",
-      #               col = col.pch$col, pch = col.pch$pch
-      #   )
-      #   return(plotScores)
-      # }, res = 150, 
-      # height = reactive(input$height),
-      # width = reactive(input$width))
+      output$scatterPlot <- renderPlot({
+        req(input$runPLSDAopt)
+        my_plsda <- mixOmics::plsda(X,Y, ncomp = input$ncompOpt %>% as.numeric())
+        scatterData <- my_plsda$variates$X
+        expl.variance <- my_plsda$prop_expl_var$X * 100
+        names(expl.variance) <- gsub("comp", x = expl.variance %>% names(), replacement = "PC")
+        colnames(scatterData) = paste0(names(expl.variance), ": ", as.character(round(expl.variance, 2)),
+                                       c("% of explained variance"))
+        plotScores <- scatterPlotPLS(scatterData = scatterData, Xcomp = input$comp1, Ycomp = input$comp2, title = input$title, sizeTitle = input$sizeTitle,
+                                     sizeLabels = input$sizeLabels, sizePoints = input$sizePoints, sizeXYaxis = input$sizeXYaxis, sizeXYlabel = input$sizeXYlabel,
+                                     sizeLegendTitle = input$sizeLegendTitle, sizeLegendLevels = input$sizeLegendLevels, declutterLabels = input$declutterLabels,
+                                     sizeSegment = input$sizeSegment, showCentroid = input$showCentroid, showEllipses = input$showEllipses, Y = Y, labels = "None",
+                                     col = col.pch$col, pch = col.pch$pch
+        )
+        plotScores
+      },
+      res = 150,
+      height = reactive(input$height),
+      width = reactive(input$width)
+      )
+      
+      output$predictionsPlot <- renderPlot({
+        dist <- "max.dist.predictions"
+        id = Y
+        ncompOpt = 4
+        Y <- Y %>% as.factor()
+        req(input$runPLSDAopt)
+        my.partition <- doPartition(Y = Y, type = input$type, typePartition = input$typePartition, folds = input$folds, rep = input$rep)
+        folds <- my.partition$folds
+        rep <- my.partition$rep
+        plsdaPerf <- plsdaCV(X = X, Y = Y, rep = rep, partition = my.partition$partition, ncompMax = input$ncompMax)
+        
+        predictions <- getPredictionMatrices(plsdaPerf = plsdaPerf, Y = Y, ncompOpt = ncompOpt, dist = dist, id = id)
+        colourPredictions <- pivot_longer(predictions$colours, cols = -c(ID, order))
+        dataPredictions <- pivot_longer(predictions$predictionSummary, cols = -c(ID, order)) %>% 
+          mutate(dataPredictions, ID = factor(ID, levels = unique(ID)))
+        
+        Ymeans <- calculateMeans(rep = rep, Y = dataPredictions$name %>% as.factor())
+        dataPredictions <- dataPredictions %>% mutate(.,"mean" = Ymeans) %>% mutate(., "min" = mean - value/2, "max" = mean + value/2) %>%
+          mutate(., "colour" = colourPredictions %>% pull(value)) %>% arrange(name)
+        
+        sizeYaxis = 5
+        sizeXaxis = 10
+        sizeLegendTitle = 16
+        sizeLegendLevels = 14
+        sizeSegment = 3
+        
+        predictionPlot(dataPredictions, sizeXaxis, sizeYaxis, sizeLegendTitle, sizeLegendLevels, sizeSegment)  
+      })
+
+      output$Debugging <- renderTable({
+        req(input$runPLSDAopt)
+        dist <- "max.dist.predictions"
+        id = Y
+        Y <- Y %>% as.factor()
+        req(input$runPLSDAopt)
+        my.partition <- doPartition(Y = Y, type = input$type, typePartition = input$typePartition, folds = input$folds, rep = input$rep)
+        folds <- my.partition$folds
+        rep <- my.partition$rep
+        plsdaPerf <- plsdaCV(X = X, Y = Y, rep = rep, partition = my.partition$partition, ncompMax = input$ncompMax)
+        
+        predictions <- getPredictionMatrices(plsdaPerf = plsdaPerf, Y = Y, ncompOpt = input$ncompOpt, dist = dist, id = id)
+        colourPredictions <- pivot_longer(predictions$colours, cols = -c(ID, order))
+        dataPredictions <- pivot_longer(predictions$predictionSummary, cols = -c(ID, order)) %>% 
+          mutate(dataPredictions, ID = factor(ID, levels = unique(ID)))
+        
+        Ymeans <- calculateMeans(rep = rep, Y = dataPredictions$name %>% as.factor())
+        dataPredictions <- dataPredictions %>% mutate(.,"mean" = Ymeans) %>% mutate(., "min" = mean - value/2, "max" = mean + value/2) %>%
+          mutate(., "colour" = colourPredictions %>% pull(value)) %>% arrange(name)
+        predictions$predictionSummary
+      })
+
     }
   )
 }
@@ -186,7 +253,7 @@ scatterPlotPLS <- function(scatterData, sizeLabels = 3, sizePoints = 3, col, pch
   
   # This allows to plot 1 component when setting Xcomp and Ycomp to 1
   if (Xcomp == 1 & Ycomp == 1) {
-    scatterDataplot <- scatterData %>% as.data.frame() %>% mutate(., Y) %>% arrange(Y) %>% mutate(., 1:nrow(.))
+    scatterDataplot <- scatterData %>% as.data.frame() %>% dplyr::mutate(., Y) %>% arrange(Y) %>% dplyr::mutate(., 1:nrow(.))
     colnames(scatterDataplot)[ncol(scatterDataplot)] <- "Sample"
     Xcomp <- scatterDataplot %>% ncol()
     rownames(scatterDataplot) <- scatterDataplot %>% pull(Sample) 
@@ -195,7 +262,7 @@ scatterPlotPLS <- function(scatterData, sizeLabels = 3, sizePoints = 3, col, pch
   }else{
     plotOneComp = F
     scatterData <- scatterData %>% as.data.frame()
-    scatterDataplot <- scatterData  %>% as.data.frame() %>% mutate(., Y)
+    scatterDataplot <- scatterData  %>% as.data.frame() %>% dplyr::mutate(., Y)
   }
   
   scatter <- ggplot(scatterDataplot, aes(x = scatterDataplot[,Xcomp], y = scatterDataplot[,Ycomp], label = labels))  +
@@ -235,8 +302,8 @@ scatterPlotPLS <- function(scatterData, sizeLabels = 3, sizePoints = 3, col, pch
                       max.time = 0.5, max.iter = 2000, min.segment.length = 0.1, force = 1, force_pull = 5) 
   }
   if (showCentroid == T & plotOneComp == F) {
-    centroids <- scatterData[,c(Xcomp, Ycomp)] %>% mutate(., Y) %>% group_by(Y) %>% summarise_if(is.numeric, funs(mean)) %>% as.data.frame()
-    scatterCentroids <- scatterData %>% mutate(., Y) %>% merge(., centroids, by = "Y")
+    centroids <- scatterData[,c(Xcomp, Ycomp)] %>% dplyr::mutate(., Y) %>% group_by(Y) %>% summarise_if(is.numeric, mean) %>% as.data.frame()
+    scatterCentroids <- scatterData %>% dplyr::mutate(., Y) %>% merge(., centroids, by = "Y")
     colnames(scatterCentroids) <- c("Y", colnames(scatterData), "centroid.X", "centroid.Y")
     
     scatter <- scatter + geom_point(data = scatterCentroids, aes(x = centroid.X, y = centroid.Y, color = Y), size = sizePoints/3) +
@@ -283,8 +350,7 @@ plsAssignations <- function(X, Y, partition, ncompMax){
 }
 # FUNCTION: perform iterations of the cross validation
 plsdaCV <- function(X, Y, rep, partition, ncompMax){
-  withProgress(message = "Cross validation", value = 0 , {
-    percentage <- 0
+  withProgress(message = "Cross validation", value = 0, {
     plsAsses <- lapply(partition, function(x){
       incProgress(1/length(x))
       plsAssignations(X, Y, partition = x, ncompMax = ncompMax)
@@ -375,7 +441,7 @@ findOptimalN <- function(objectOpt, objective){
   })
 }
 # FUNCTION: plot the diagnostics along the components
-plotDiagnostic <- function(diagnostic, title = "", show.legend = T){
+plotDiagnostic <- function(diagnostic, title = "", show.legend = T, show.sd = F){
   diagnosticPlot <- pivot_longer(diagnostic, cols = -Component, names_to = "Distance") %>% as.data.frame()
   gg <- ggplot(data = diagnosticPlot, aes(x = factor(Component), y = value, group = Distance)) +
     ggtitle(title) +
@@ -393,7 +459,87 @@ plotDiagnostic <- function(diagnostic, title = "", show.legend = T){
   gg
 }
 
-
+# FUNCTION: extract matrices for prediction plot
+getPredictionMatrices <- function(plsdaPerf, Y, ncompOpt, dist, id){
+  predictions <- purrr::map(plsdaPerf, function(x){purrr::map(x, function(x) {
+    x <- x %>% as_tibble() %>% dplyr::select(any_of(ncompOpt)) %>% cbind(as_tibble(Y)) %>% dplyr::arrange(., value) %>% dplyr::pull(1) %>% as.character()
+  })})
+  Y <- sort(Y)
+  
+  max.dist.predictions = centroids.dist.predictions = mahalanobis.dist.predictions = list()
+  for (i in 1:length(Y)) {
+    max.dist.predictions[[i]] <- purrr::map(predictions$max, i) %>% do.call(cbind, .)
+    centroids.dist.predictions[[i]] <- purrr::map(predictions$centroids, i) %>% do.call(cbind, .)
+    mahalanobis.dist.predictions[[i]] <- purrr::map(predictions$mahalanobis, i) %>% do.call(cbind, .)
+  }
+  all.predictions <- list(
+    "max.dist.predictions" = do.call(rbind, max.dist.predictions) %>% set_rownames(Y) %>% as_tibble(),
+    "centroids.dist.predictions" = do.call(rbind, centroids.dist.predictions) %>% set_rownames(Y) %>% as_tibble(),
+    "mahalanobis.dist.predictions" = do.call(rbind, mahalanobis.dist.predictions) %>% set_rownames(Y) %>% as_tibble()
+  )
+  
+  dist.prediction.selected <- all.predictions %>% extract2(dist)
+  predictionSummary <- apply(dist.prediction.selected, 1, function(x){
+    sumLevels = c()
+    for (i in 1:nlevels(Y)) {
+      sumLevels[i] <- sum(x == levels(Y)[i])
+    }
+    return(sumLevels)
+  }) %>% t() %>% set_colnames(levels(Y)) %>% as_tibble() %>% dplyr::mutate(., "ID" = id, "order" = 1:length(Y))
+  
+  colours <- predictionSummary %>% cbind(., Y)  
+  for (i in 1:nlevels(Y)) {
+    green <- which(pull(colours, Y) == levels(Y)[i])
+    red <- which(pull(colours, Y) != levels(Y)[i])
+    colours[,i][green] = "Correctly classified"
+    colours[,i][red] = "Wrongly classified"
+  }
+  colours <- colours %>% as_tibble() %>% dplyr::select(-Y)
+  
+  return(list("predictionSummary" = predictionSummary, "colours" = colours))
+}
+# FUNCTION: Calculate position for prediction plot
+calculateMeans <- function(rep, Y){
+  positionFirst <- rep/2 + 1
+  positionRest = c()
+  for (i in 1:(length(levels(Y))-1)) {
+    positionRest[i] <- rep * i + i/2 + positionFirst
+  }
+  means <- c(positionFirst, positionRest)
+  Ymeans <- Y %>% as.character()
+  for (i in 1:length(means)) {
+    Ymeans[Ymeans == levels(Y)[i]] <- means[i]
+  }
+  Ymeans <- Ymeans %>% as.numeric
+  return(Ymeans)
+}
+# FUNCTION: Prediction plot
+predictionPlot <- function(dataPredictions, sizeXaxis, sizeYaxis, sizeLegendTitle, sizeLegendLevels, sizeSegment){
+  dataPredictions <- dataPredictions %>% mutate(ID = as.character(ID))
+  breaksPlot <- dataPredictions$mean %>% as.factor() %>% levels() %>% as.numeric()
+  pp <- ggplot(dataPredictions) +
+    geom_segment(aes(x = min, y = order, xend = max, yend = order, color = colour), size = sizeSegment) + 
+    scale_y_discrete() +
+    scale_x_continuous(breaks = breaksPlot, labels = levels(Y)) +
+    scale_color_manual(values = c("darkgreen", "darkred")) +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = sizeXaxis)) +
+    theme(axis.text.y = element_text(size = sizeYaxis)) +
+    theme(legend.title = element_text(size = sizeLegendTitle)) + 
+    theme(legend.text = element_text(size = sizeLegendLevels)) +
+    guides(col = guide_legend(title = "Legend")) + 
+    xlab("")
+  
+  cutoffX = 1; cutoffY = 0
+  for (i in 1:(nlevels(Y)-1)) {
+    cutoffY <- cutoffY + summary(Y)[i]
+    if (i > 1) {incr = rep + 0.5} else{incr = rep}
+    cutoffX <- cutoffX + incr  
+    pp <- pp + geom_hline(yintercept = cutoffY + 0.5, linetype = "dashed")
+    pp <- pp + geom_vline(xintercept = cutoffX + 0.25, linetype = "dashed")
+  }
+  return(pp)
+}
 
 
 

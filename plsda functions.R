@@ -1,7 +1,12 @@
 library(mixOmics)
-my.plsda <- plsda(X,Y,ncomp =6)
-perf.plsda <- perf(my.plsda, validation = "loo", progressBar = T)
+my.plsda <- mixOmics::plsda(X,Y,ncomp = 6)
+perf.plsda <- mixOmics::perf(my.plsda, validation = "loo", progressBar = T)
 plot(perf.plsda)
+backgraound <- background.predict(my.plsda, comp.predicted = 2, dist = "mahalanobis.dist")
+
+plotIndiv(my.plsda, comp = 1:2, group = Y, ind.names = F, background = backgraound, legend = T, title = "plsda")
+
+
 #############################################################################################################
 # PLS-DA construction
 #############################################################################################################
@@ -13,12 +18,12 @@ Y <- data$Style %>% as.factor()
 X <- data[,-c(1:7)] %>% scale()
 ncompMax <- 6 # Max number of components to optimize
 
-type <- "loo" # Mfold / loo
+type <- "Mfold" # Mfold / loo
 
 typePartition <- "stratified" # stratified, basic, grouped, blocked
 
-folds = 6
-rep = 5
+folds = 4
+rep = 10
 
 classErrorPlot <- "Andalusian" # (For class error rate)
 
@@ -51,7 +56,32 @@ plotDiagnostic(Accuracymean, "Accuracy")
 noptimalBER <- findOptimalN(BERmean, "min")
 noptimalErrorClass <- findOptimalN(classErrormean, "min")
 noptimalAccuracy <- findOptimalN(Accuracymean, "max")
-ncompOptimal <- rbind(noptimalBER, noptimalErrorClass, noptimalAccuracy) %>% set_rownames(c("BER", str_glue("Error {classErrorPlot} class"), "Accuracy"))
+ncompOptimal <- rbind(noptimalBER, noptimalAccuracy, noptimalErrorClass) %>% set_rownames(c("BER", "Accuracy", str_glue("Error {classErrorPlot} class")))
+
+# ----------------- Assignation plot ----------------- #
+ncompOpt <- 4
+dist <- "max.dist.predictions"
+
+predictions <- getPredictionMatrices(plsdaPerf = plsdaPerf, Y = Y, ncompOpt = ncompOpt, dist = dist, id = Y)
+colourPredictions <- pivot_longer(predictions$colours, cols = -c(ID, order))
+dataPredictions <- pivot_longer(predictions$predictionSummary, cols = -c(ID, order)) %>% 
+  mutate(dataPredictions, ID = factor(ID, levels = unique(ID)))
+
+
+Ymeans <- calculateMeans(rep = rep, Y = dataPredictions$name %>% as.factor())
+dataPredictions <- dataPredictions %>% mutate(.,"mean" = Ymeans) %>% mutate(., "min" = mean - value/2, "max" = mean + value/2) %>%
+  mutate(., "colour" = colourPredictions %>% pull(value)) %>% arrange(name)
+
+sizeYaxis = 5
+sizeXaxis = 10
+sizeLegendTitle = 16
+sizeLegendLevels = 14
+sizeSegment = 3
+
+predictionPlot(dataPredictions, sizeXaxis, sizeYaxis, sizeLegendTitle, sizeLegendLevels, sizeSegment)
+
+
+
 
 #############################################################################################################
 # FUNCTION: partitions calibration and validation sets
@@ -91,9 +121,11 @@ plsAssignations <- function(X, Y, partition, ncompMax){
 }
 # FUNCTION: perform iterations of the cross validation
 plsdaCV <- function(X, Y, rep, partition, ncompMax){
-  plsAsses <- lapply(partition, function(x){
-    plsAssignations(X, Y, partition = x, ncompMax = ncompMax)
-  })
+    plsAsses <- lapply(partition, function(x){
+      plsAssignations(X, Y, partition = x, ncompMax = ncompMax)
+    })
+
+  
   fSplit <- rep(1:rep, length(Y)) %>% sort(.)
   max.dist.Assign <- do.call(rbind, purrr::map(plsAsses, 1)) %>% split(., f = fSplit) %>% lapply(., function(x){x %>% arrange(Index) %>% dplyr::select(-Index)})
   centroids.dist.Assign <- do.call(rbind, purrr::map(plsAsses, 2)) %>% split(., f = fSplit) %>% lapply(., function(x){x %>% arrange(Index) %>% dplyr::select(-Index)})
@@ -188,4 +220,97 @@ plotDiagnostic <- function(diagnostic, title = ""){
     theme(plot.title = element_text(hjust = 0.5))
   gg
 }
+# FUNCTION: extract matrices for prediction plot
+getPredictionMatrices <- function(plsdaPerf, Y, ncompOpt, dist, id){
+  predictions <- map(plsdaPerf, function(x){map(x, function(x) {
+    x <- x %>% as_tibble() %>% dplyr::select(any_of(ncompOpt)) %>% cbind(as_tibble(Y)) %>% dplyr::arrange(., value) %>% dplyr::pull(1) %>% as.character()
+  })})
+  Y <- sort(Y)
+  
+  max.dist.predictions = centroids.dist.predictions = mahalanobis.dist.predictions = list()
+  for (i in 1:length(Y)) {
+    max.dist.predictions[[i]] <- map(predictions$max, i) %>% do.call(cbind, .)
+    centroids.dist.predictions[[i]] <- map(predictions$centroids, i) %>% do.call(cbind, .)
+    mahalanobis.dist.predictions[[i]] <- map(predictions$mahalanobis, i) %>% do.call(cbind, .)
+  }
+  all.predictions <- list(
+    "max.dist.predictions" = do.call(rbind, max.dist.predictions) %>% set_rownames(Y) %>% as_tibble(),
+    "centroids.dist.predictions" = do.call(rbind, centroids.dist.predictions) %>% set_rownames(Y) %>% as_tibble(),
+    "mahalanobis.dist.predictions" = do.call(rbind, mahalanobis.dist.predictions) %>% set_rownames(Y) %>% as_tibble()
+  )
+  
+  dist.prediction.selected <- all.predictions %>% extract2(dist)
+  predictionSummary <- apply(dist.prediction.selected, 1, function(x){
+    sumLevels = c()
+    for (i in 1:nlevels(Y)) {
+      sumLevels[i] <- sum(x == levels(Y)[i])
+    }
+    return(sumLevels)
+  }) %>% t() %>% set_colnames(levels(Y)) %>% as_tibble() %>% mutate(., "ID" = id, "order" = 1:length(Y))
+  
+  colours <- predictionSummary %>% cbind(., Y)  
+  for (i in 1:nlevels(Y)) {
+    green <- which(pull(colours, Y) == levels(Y)[i])
+    red <- which(pull(colours, Y) != levels(Y)[i])
+    colours[,i][green] = "Correctly classified"
+    colours[,i][red] = "Wrongly classified"
+  }
+  colours <- colours %>% as_tibble() %>% dplyr::select(-Y)
+  
+  return(list("predictionSummary" = predictionSummary, "colours" = colours, "Y" = Y))
+}
+# FUNCTION: Calculate position for prediction plot
+calculateMeans <- function(rep, Y){
+  positionFirst <- rep/2 + 1
+  positionRest = c()
+  for (i in 1:(length(levels(Y))-1)) {
+    positionRest[i] <- rep * i + i/2 + positionFirst
+  }
+  means <- c(positionFirst, positionRest)
+  Ymeans <- Y %>% as.character()
+  for (i in 1:length(means)) {
+    Ymeans[Ymeans == levels(Y)[i]] <- means[i]
+  }
+  Ymeans <- Ymeans %>% as.numeric
+  return(Ymeans)
+}
+# FUNCTION: Prediction plot
+predictionPlot <- function(dataPredictions, sizeXaxis, sizeYaxis, sizeLegendTitle, sizeLegendLevels, sizeSegment){
+  dataPredictions <- dataPredictions %>% mutate(ID = as.character(ID))
+  breaksPlot <- dataPredictions$mean %>% as.factor() %>% levels() %>% as.numeric()
+  pp <- ggplot(dataPredictions) +
+    geom_segment(aes(x = min, y = order, xend = max, yend = order, color = colour), linewidth = sizeSegment) + 
+    scale_y_discrete() +
+    scale_x_continuous(breaks = breaksPlot, labels = levels(Y)) +
+    scale_color_manual(values = c("darkgreen", "darkred")) +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = sizeXaxis)) +
+    theme(axis.text.y = element_text(size = sizeYaxis)) +
+    theme(legend.title = element_text(size = sizeLegendTitle)) + 
+    theme(legend.text = element_text(size = sizeLegendLevels)) +
+    guides(col = guide_legend(title = "Legend")) + 
+    xlab("")
+  
+  cutoffX = 1; cutoffY = 0
+  for (i in 1:(nlevels(Y)-1)) {
+    cutoffY <- cutoffY + summary(Y)[i]
+    if (i > 1) {incr = rep + 0.5} else{incr = rep}
+    cutoffX <- cutoffX + incr  
+    pp <- pp + geom_hline(yintercept = cutoffY + 0.5, linetype = "dashed")
+    pp <- pp + geom_vline(xintercept = cutoffX + 0.25, linetype = "dashed")
+  }
+  return(pp)
+}
+
+
+
+
+
+
+
+
+
+
+
+
 
