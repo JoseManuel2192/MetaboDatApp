@@ -1,6 +1,6 @@
 library(shiny); library(mixOmics); library(readxl); library(DT); library(ggrepel); library(shinythemes); library(shinyjs); library(ggforce)
 library(rstatix); library(magrittr); library(tidyverse); library(agricolae); library(ascii); library(memisc); library(shinycssloaders)
-library(plyr); library(splitTools); library(sjmisc); library(pbapply);
+library(plyr); library(splitTools); library(sjmisc); library(pbapply)
 
 ui = fluidPage(
   tags$style(type="text/css",
