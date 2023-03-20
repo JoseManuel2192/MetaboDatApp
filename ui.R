@@ -3,8 +3,7 @@
 packages <- c("shiny", "mixOmics", "readxl", "DT", "ggrepel", "shinythemes", "shinyjs", "ggforce", "rstatix",
               "magrittr", "tidyverse", "agricolae", "ascii", "memisc", "shinycssloaders", "plyr", "splitTools", 
               "sjmisc", "pbapply")
-lapply(packages, require, character.only = TRUE) %>% 
-  invisible
+lapply(packages, require, character.only = TRUE)
 
 ui = fluidPage(
   tags$style(type="text/css",
