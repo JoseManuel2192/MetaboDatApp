@@ -1,6 +1,10 @@
-library(shiny); library(mixOmics); library(readxl); library(DT); library(ggrepel); library(shinythemes); library(shinyjs); library(ggforce)
-library(rstatix); library(magrittr); library(tidyverse); library(agricolae); library(ascii); library(memisc); library(shinycssloaders)
-library(plyr); library(splitTools); library(sjmisc); library(pbapply)
+
+# Loading packages --------------------------------------------------------
+packages <- c("shiny", "mixOmics", "readxl", "DT", "ggrepel", "shinythemes", "shinyjs", "ggforce", "rstatix",
+              "magrittr", "tidyverse", "agricolae", "ascii", "memisc", "shinycssloaders", "plyr", "splitTools", 
+              "sjmisc", "pbapply")
+lapply(packages, require, character.only = TRUE) %>% 
+  invisible
 
 ui = fluidPage(
   tags$style(type="text/css",
@@ -12,9 +16,7 @@ ui = fluidPage(
   tabsetPanel(id = "Data",
               tabPanel("Import data", 
                        
-                       ########################
-                       # Loading data
-                       ########################
+                       # Loading data ------------------------------------------------------------
                        sidebarLayout(
                          sidebarPanel(
                            width = 3,
@@ -43,12 +45,12 @@ ui = fluidPage(
                        # )
               ),
               
-              # Data exploration panel
+              
+              # Data exploration panel --------------------------------------------------
               tabPanel("Data exploration",
                        
-                       ########################
-                       # PCA scores plot
-                       ########################
+                       
+                       ## PCA scores plot ---------------------------------------------------------
                        tabsetPanel(
                          tabPanel("PCA scores plot",
                                   sidebarLayout(
@@ -91,9 +93,8 @@ ui = fluidPage(
                                               plotOutput("scoresPCA", width = 250, height = 250))
                                   )
                          ), 
-                         #########################
-                         # PCA Loadings plot 
-                         #########################
+                         
+                         ## PCA Loadings plot  ------------------------------------------------------
                          tabPanel("PCA loadings plot",
                                   sidebarLayout( 
                                     sidebarPanel(shinyjs::useShinyjs(),
@@ -137,9 +138,7 @@ ui = fluidPage(
                                   )
                          ),
                          
-                         #########################
-                         # Heatmap subpanel
-                         #########################
+                         ## Heatmap subpanel --------------------------------------------------------
                          tabPanel("Heat map",
                                   sidebarLayout( 
                                     sidebarPanel(width = 3
@@ -149,15 +148,13 @@ ui = fluidPage(
                                   )
                          )
                        ),
-                       # 2 level: PCA loadings
               ),
-              #############
+              
+              # Univariate analysis -----------------------------------------------------              
               tabPanel("Univariate analysis",
                        tabsetPanel(
                          
-                         #############
-                         # ANOVA
-                         #############
+                         ## ANOVA -------------------------------------------------------------------                         
                          tabPanel("ANOVA",
                                   sidebarLayout( 
                                     sidebarPanel(width = 3, 
@@ -178,9 +175,8 @@ ui = fluidPage(
                                     )     
                                   )
                          ),
-                         ##################
-                         # Correlations
-                         ##################
+                         
+                         ## Correlations ------------------------------------------------------------
                          tabPanel("Correlations",
                                   sidebarLayout( 
                                     sidebarPanel(width = 3
@@ -191,12 +187,12 @@ ui = fluidPage(
                          )
                        )
               ),
-              ##################
+              
+              # Univariate visualizations -----------------------------------------------
               tabPanel("Univariate visualization",
                        tabsetPanel(
-                         #######################
-                         # Box/violin plot
-                         #######################
+                         
+                         ## Box/violin plot ---------------------------------------------------------
                          tabPanel("Box/violin plot",
                                   sidebarLayout( 
                                     sidebarPanel(width = 3,
@@ -236,16 +232,12 @@ ui = fluidPage(
                                   )
                          ),
                          
-                         ##################
-                         # Histogram
-                         ##################
+                         ## Histogram ---------------------------------------------------------------
                          tabPanel("Bar plot",
                                   barPlotUI("barPlot")
                          ),
                          
-                         ##################
-                         # Density plot
-                         ##################
+                         ## Density plot ------------------------------------------------------------
                          tabPanel("Histogram",
                                   sidebarLayout( 
                                     sidebarPanel(width = 3
@@ -255,10 +247,7 @@ ui = fluidPage(
                                   )
                          ),
                          
-                         ##################
-                         # BarPlot
-                         ##################
-                         
+                         ## Density plot ------------------------------------------------------------
                          tabPanel("Density plot",
                                   sidebarLayout( 
                                     sidebarPanel(width = 3
@@ -271,12 +260,12 @@ ui = fluidPage(
                        )
               ),
               
+              # Classification models ---------------------------------------------------              
               tabPanel("Classification models",
                        tabsetPanel(
                          
-                         ##################
-                         # LDA
-                         ##################
+                         
+                         ## LDA ---------------------------------------------------------------------
                          # tabPanel("LDA",
                          #          sidebarLayout( 
                          #            sidebarPanel(width = 3
@@ -286,16 +275,13 @@ ui = fluidPage(
                          #          )
                          # ),
                          
-                         ##################
-                         # PLS-DA
-                         ##################
+                         
+                         ## PLS-DA ------------------------------------------------------------------
                          tabPanel("PLS-DA",
                                   plsdaUI("plsdaScores")
                          ),
                          
-                         ##################
-                         # SVM
-                         ##################
+                         ## SVM ---------------------------------------------------------------------
                          tabPanel("Support Vector Machines",
                                   sidebarLayout( 
                                     sidebarPanel(width = 3
@@ -307,12 +293,11 @@ ui = fluidPage(
                        )
               ),
               
+              # Regression models -------------------------------------------------------              
               tabPanel("Regression models",
                        tabsetPanel(
                          
-                         ##################
-                         # PCR
-                         ##################
+                         ## PCR ---------------------------------------------------------------------                         
                          tabPanel("PCR",
                                   sidebarLayout( 
                                     sidebarPanel(width = 3
@@ -322,9 +307,7 @@ ui = fluidPage(
                                   )
                          ),
                          
-                         ##################
-                         # PLSR
-                         ##################
+                         ## PLSR --------------------------------------------------------------------
                          tabPanel("PLSR",
                                   sidebarLayout( 
                                     sidebarPanel(width = 3
@@ -334,9 +317,7 @@ ui = fluidPage(
                                   )
                          ),
                          
-                         ##################
-                         # SVMR
-                         ##################
+                         ## SVMR --------------------------------------------------------------------
                          tabPanel("SVMR",
                                   sidebarLayout( 
                                     sidebarPanel(width = 3
@@ -348,9 +329,7 @@ ui = fluidPage(
                        ),
               ),
               
-              ##################
-              # Template
-              ##################
+              # Template ----------------------------------------------------------------
               tabPanel("Template",
                        tabsetPanel(
                          tabPanel("Template",
